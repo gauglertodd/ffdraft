@@ -1178,8 +1178,6 @@ const DraftTrackerContent = () => {
             toggleTheme={toggleTheme}
             watchHighlightColor={watchHighlightColor}
             setWatchHighlightColor={setWatchHighlightColor}
-            watchHighlightOpacity={watchHighlightOpacity}
-            setWatchHighlightOpacity={setWatchHighlightOpacity}
             showAvailabilityPrediction={showAvailabilityPrediction}
             setShowAvailabilityPrediction={setShowAvailabilityPrediction}
             predictionTrials={predictionTrials}
