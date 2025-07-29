@@ -28,6 +28,7 @@ app = Flask(__name__)
 CORS(app, origins=[
     "http://localhost:5173",  # Development
     "https://*.onrender.com"  # Allow all Render domains
+    "https://ffdraft-1.onrender.com",  # Your frontend domain
 ])
 
 
