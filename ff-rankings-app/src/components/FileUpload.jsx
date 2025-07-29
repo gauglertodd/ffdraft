@@ -518,7 +518,6 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
         </ul>
         <div style={styles.optionalNote}>
           💡 <strong>Tip:</strong> Adding a "tier" column enables tier-based draft strategies.
-          Tiers group players of similar value (e.g., Tier 1 = elite players, Tier 2 = very good players, etc.)
         </div>
       </div>
 
@@ -561,10 +560,6 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
             </button>
           </div>
         </div>
-
-        <p style={styles.presetSubtitle}>
-          Automatically detects common CSV filenames in your public/ directory. Use "Custom File" to load any other CSV file.
-        </p>
 
         {/* Custom File Input */}
         {showCustomInput && (
