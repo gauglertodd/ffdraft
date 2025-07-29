@@ -29,7 +29,12 @@ CORS(app, origins=[
     "http://localhost:5173",  # Development
     "https://*.onrender.com"  # Allow all Render domains
     "https://ffdraft-1.onrender.com",  # Your frontend domain
-])
+    "*",
+],
+     methods=['GET', 'POST', 'OPTIONS'],
+     allow_headers=['Content-Type'],
+     supports_credentials=False
+)
 
 
 def apply_strategy_variability(available_players_df: pd.DataFrame, strategy_result_id: int, variability: float = 0.0) -> int:
