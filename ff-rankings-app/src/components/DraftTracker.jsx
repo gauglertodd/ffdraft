@@ -1172,13 +1172,10 @@ const DraftTrackerContent = () => {
 
           {/* Player Rankings */}
           <PlayerList
-            showDrafted={showDrafted}
             setShowDrafted={setShowDrafted}
             isDarkMode={isDarkMode}
             toggleTheme={toggleTheme}
-            watchHighlightColor={watchHighlightColor}
             setWatchHighlightColor={setWatchHighlightColor}
-            showAvailabilityPrediction={showAvailabilityPrediction}
             setShowAvailabilityPrediction={setShowAvailabilityPrediction}
             predictionTrials={predictionTrials}
             setPredictionTrials={setPredictionTrials}

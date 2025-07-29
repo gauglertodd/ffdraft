@@ -1,0 +1,19 @@
+/*
+  Content-Type: text/html; charset=UTF-8
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+
+/assets/*.js
+  Content-Type: application/javascript; charset=UTF-8
+
+/assets/*.css
+  Content-Type: text/css; charset=UTF-8
+
+/assets/*.woff2
+  Content-Type: font/woff2
+
+/assets/*.woff
+  Content-Type: font/woff
+
+/assets/*.ttf
+  Content-Type: font/ttf
