@@ -25,7 +25,10 @@ from draft_strategies import (
 )
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for React app
+CORS(app, origins=[
+    "http://localhost:5173",  # Development
+    "https://*.onrender.com"  # Allow all Render domains
+])
 
 
 def apply_strategy_variability(available_players_df: pd.DataFrame, strategy_result_id: int, variability: float = 0.0) -> int:
