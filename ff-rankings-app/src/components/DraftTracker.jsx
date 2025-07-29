@@ -421,42 +421,53 @@ const DraftTrackerContent = () => {
   }, [currentDraftPick, currentTeam, showAvailabilityPrediction, isDraftRunning, autoDraftSettings, draftedPlayers.length, players.length, teams.length]);
 
   // Auto-draft API integration
-  const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variability = 0.0) => {
-    try {
-      const response = await fetch(`${API_URL}/auto-draft`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          available_players: availablePlayers,
-          team_roster: teamRoster,
-          strategy: strategy,
-          variability: variability
-        })
-      });
+const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variability = 0.0) => {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
-      }
+  // Debug logging
+  console.log('🔍 API_URL being used:', API_URL);
+  console.log('🔍 Full URL:', `${API_URL}/auto-draft`);
+  console.log('🔍 Request payload:', {
+    available_players: availablePlayers,
+    team_roster: teamRoster,
+    strategy: strategy,
+    variability: variability
+  });
 
-      const result = await response.json();
+  try {
+    const response = await fetch(`${API_URL}/auto-draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        available_players: availablePlayers,
+        team_roster: teamRoster,
+        strategy: strategy,
+        variability: variability
+      })
+    });
+
+    console.log('🔍 Response status:', response.status);
+    console.log('🔍 Response headers:', response.headers);
+
+    // Get the raw response text first
+    const responseText = await response.text();
+    console.log('🔍 Raw response:', responseText);
+
+    // Try to parse as JSON
+    if (responseText) {
+      const result = JSON.parse(responseText);
       return result;
-    } catch (error) {
-      console.error('Auto-draft API error:', error);
-      const undraftedPlayers = availablePlayers.filter(p => !draftedPlayers.includes(p.id));
-      if (undraftedPlayers.length > 0) {
-        const bestPlayer = undraftedPlayers.sort((a, b) => a.rank - b.rank)[0];
-        return {
-          player_id: bestPlayer.id,
-          player_name: bestPlayer.name,
-          reasoning: 'API unavailable - selected best available player',
-          strategy_used: 'Fallback BPA'
-        };
-      }
-      return null;
+    } else {
+      throw new Error('Empty response from server');
     }
-  };
+
+  } catch (error) {
+    console.error('❌ Auto-draft API error:', error);
+    return null;
+  }
+};
 
   // Local fallback strategy execution
   const executeLocalFallback = (availablePlayers, strategy) => {
