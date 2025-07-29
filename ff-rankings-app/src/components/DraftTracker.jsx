@@ -76,6 +76,9 @@ const DraftTrackerContent = () => {
     BENCH: '#6b7280'
   });
 
+  // Current CSV source tracking
+  const [currentCSVSource, setCurrentCSVSource] = useState('');
+
   const styles = {
     container: {
       ...themeStyles.container,
@@ -106,6 +109,13 @@ const DraftTrackerContent = () => {
       fontSize: '16px',
       fontWeight: '600',
       boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+    },
+    csvSourceIndicator: {
+      position: 'absolute',
+      right: '16px',
+      fontSize: '12px',
+      color: 'rgba(255, 255, 255, 0.8)',
+      fontWeight: '400'
     }
   };
 
@@ -175,20 +185,33 @@ const DraftTrackerContent = () => {
     }
   };
 
-  // Handle file upload
-  const handleFileUpload = (file) => {
+  // Handle file upload (both new and switching)
+  const handleFileUpload = (file, isSwitch = false) => {
     if (file && file.type === 'text/csv') {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const parsedPlayers = parseCSV(e.target.result);
           setPlayers(parsedPlayers);
-          setDraftedPlayers([]);
-          setSearchQuery('');
-          setCurrentDraftPick(1);
-          setWatchedPlayers([]);
-          setIsAutoDrafting(false);
-          setLastAutoDraftTime(null);
+
+          // Set CSV source indicator
+          setCurrentCSVSource(file.name);
+
+          if (!isSwitch) {
+            // Only reset draft state if this is a new upload, not a switch
+            setDraftedPlayers([]);
+            setSearchQuery('');
+            setCurrentDraftPick(1);
+            setWatchedPlayers([]);
+            setIsAutoDrafting(false);
+            setLastAutoDraftTime(null);
+            setAvailabilityPredictions({});
+            setLastPredictionTime(null);
+          } else {
+            // For switches, preserve draft state but reset predictions
+            setAvailabilityPredictions({});
+            setLastPredictionTime(null);
+          }
         } catch (error) {
           alert('Error parsing CSV: ' + error.message);
         }
@@ -196,6 +219,17 @@ const DraftTrackerContent = () => {
       reader.readAsText(file);
     } else {
       alert('Please upload a CSV file');
+    }
+  };
+
+  // Handle CSV switching (preserves draft state)
+  const handleCSVSwitch = (file) => {
+    const confirmed = window.confirm(
+      "Switch to different rankings? This will change the player data but preserve your current draft picks and settings."
+    );
+
+    if (confirmed) {
+      handleFileUpload(file, true);
     }
   };
 
@@ -1107,8 +1141,15 @@ const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variabil
       {/* Sticky Header - only shown when players are loaded */}
       {players.length > 0 && (
         <div style={styles.stickyHeader}>
-          <div style={styles.headerContent}>
-            📍 Pick {currentDraftPick} - {teamNames[currentTeam] || `Team ${currentTeam}`} On The Clock
+          <div style={{ position: 'relative' }}>
+            <div style={styles.headerContent}>
+              📍 Pick {currentDraftPick} - {teamNames[currentTeam] || `Team ${currentTeam}`} On The Clock
+            </div>
+            {currentCSVSource && (
+              <div style={styles.csvSourceIndicator}>
+                Using: {currentCSVSource}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1131,6 +1172,7 @@ const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variabil
             undoLastDraft={undoLastDraft}
             draftedPlayers={draftedPlayers}
             onNewCSV={handleFileUpload}
+            onSwitchCSV={handleCSVSwitch}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             selectedPosition={selectedPosition}

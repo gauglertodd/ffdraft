@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Upload, Undo2, Search, RotateCcw } from 'lucide-react';
+import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw } from 'lucide-react';
 
 const UnifiedControlPanel = ({
   // Removed: theme, view, prediction, and watch controls - now in PlayerList
@@ -23,7 +23,10 @@ const UnifiedControlPanel = ({
   currentDraftPick,
   currentTeam,
   teamNames,
-  onRestartDraft
+  onRestartDraft,
+
+  // New: CSV switching functionality
+  onSwitchCSV
 }) => {
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -32,6 +35,90 @@ const UnifiedControlPanel = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [filteredDropdownPlayers, setFilteredDropdownPlayers] = useState([]);
+
+  // CSV switching state
+  const [showCSVOptions, setShowCSVOptions] = useState(false);
+  const [isLoadingPreset, setIsLoadingPreset] = useState(false);
+  const [availableCSVs, setAvailableCSVs] = useState([]);
+  const [isScanning, setIsScanning] = useState(false);
+
+  // Common CSV filenames to check for
+  const commonCSVNames = [
+    'FantasyPros 2025 PPR.csv',
+    'fantasypros_2024.csv',
+    'fantasypros_2025.csv',
+    'espn_2024.csv',
+    'espn_2025.csv',
+    'yahoo_2024.csv',
+    'yahoo_2025.csv',
+    'sleeper_2024.csv',
+    'sleeper_2025.csv',
+    'sample_rankings.csv',
+    'draft_rankings.csv',
+    'player_rankings.csv',
+    'rankings.csv',
+    'players.csv'
+  ];
+
+  // Generate friendly names from filenames
+  const generateFriendlyName = (filename) => {
+    const nameWithoutExt = filename.replace('.csv', '');
+
+    // Handle common patterns
+    if (nameWithoutExt.includes('fantasypros')) {
+      return nameWithoutExt.replace('fantasypros_', 'FantasyPros ').replace('_', ' ');
+    }
+    if (nameWithoutExt.includes('espn')) {
+      return nameWithoutExt.replace('espn_', 'ESPN ').replace('_', ' ');
+    }
+    if (nameWithoutExt.includes('yahoo')) {
+      return nameWithoutExt.replace('yahoo_', 'Yahoo ').replace('_', ' ');
+    }
+    if (nameWithoutExt.includes('sleeper')) {
+      return nameWithoutExt.replace('sleeper_', 'Sleeper ').replace('_', ' ');
+    }
+    if (nameWithoutExt.includes('sample')) {
+      return 'Sample Rankings';
+    }
+
+    // Default: capitalize and replace underscores
+    return nameWithoutExt
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Scan for available CSV files in the public directory
+  const scanForCSVFiles = async () => {
+    setIsScanning(true);
+    const foundFiles = [];
+
+    // Check each common filename
+    for (const filename of commonCSVNames) {
+      try {
+        const response = await fetch(`/${filename}`, { method: 'HEAD' });
+        if (response.ok) {
+          foundFiles.push({
+            filename,
+            name: generateFriendlyName(filename),
+            description: 'Available rankings'
+          });
+        }
+      } catch (error) {
+        // File doesn't exist or isn't accessible, skip silently
+      }
+    }
+
+    setAvailableCSVs(foundFiles);
+    setIsScanning(false);
+  };
+
+  // Scan for files when CSV options are first opened
+  useEffect(() => {
+    if (showCSVOptions && availableCSVs.length === 0 && !isScanning) {
+      scanForCSVFiles();
+    }
+  }, [showCSVOptions]);
 
   // Filter players for dropdown
   useEffect(() => {
@@ -118,6 +205,37 @@ const UnifiedControlPanel = ({
     }
   };
 
+  // Handle preset CSV loading
+  const handlePresetLoad = async (filename) => {
+    setIsLoadingPreset(true);
+
+    try {
+      const response = await fetch(`/${filename}`);
+      if (!response.ok) {
+        throw new Error(`Failed to load ${filename}: ${response.status}`);
+      }
+
+      const csvText = await response.text();
+
+      // Create a fake File object from the CSV text
+      const blob = new Blob([csvText], { type: 'text/csv' });
+      const file = new File([blob], filename, { type: 'text/csv' });
+
+      if (onSwitchCSV) {
+        onSwitchCSV(file);
+      } else {
+        onNewCSV(file);
+      }
+
+      setShowCSVOptions(false);
+    } catch (error) {
+      console.error('Error loading preset file:', error);
+      alert(`Failed to load ${filename}. Make sure the file exists in your public/ directory.`);
+    } finally {
+      setIsLoadingPreset(false);
+    }
+  };
+
   const styles = {
     panel: {
       ...themeStyles.card,
@@ -190,13 +308,17 @@ const UnifiedControlPanel = ({
     searchContainer: {
       position: 'relative',
       flex: '1',
-      maxWidth: '500px', // Increased from 350px
-      minWidth: '300px'
+      maxWidth: '400px', // Reduced from 500px to give more space
+      minWidth: '250px'  // Reduced from 300px
     },
     searchInputGroup: {
       display: 'flex',
       alignItems: 'center',
-      gap: '8px'
+      gap: '12px' // Increased gap between search input and hint
+    },
+    searchInputWrapper: {
+      position: 'relative',
+      flex: '1'
     },
     searchInput: {
       ...themeStyles.input,
@@ -225,7 +347,8 @@ const UnifiedControlPanel = ({
       whiteSpace: 'nowrap',
       display: 'flex',
       alignItems: 'center',
-      gap: '4px'
+      gap: '4px',
+      flexShrink: 0 // Prevent shrinking
     },
     kbd: {
       backgroundColor: themeStyles.card.backgroundColor,
@@ -242,21 +365,6 @@ const UnifiedControlPanel = ({
       fontSize: '13px',
       outline: 'none',
       minWidth: '100px'
-    },
-    opacitySlider: {
-      width: '70px',
-      height: '4px',
-      borderRadius: '2px',
-      outline: 'none',
-      cursor: 'pointer',
-      background: `linear-gradient(90deg, #fbbf24 30% 0%, #fbbf24 CC 100%)`
-    },
-    colorPicker: {
-      width: '24px',
-      height: '24px',
-      border: 'none',
-      borderRadius: '4px',
-      cursor: 'pointer'
     },
     divider: {
       width: '1px',
@@ -305,6 +413,107 @@ const UnifiedControlPanel = ({
       fontSize: '11px',
       color: themeStyles.text.muted,
       fontWeight: '500'
+    },
+    // CSV Options Dropdown
+    csvOptionsDropdown: {
+      position: 'absolute',
+      top: '100%',
+      right: '0',
+      backgroundColor: themeStyles.card.backgroundColor,
+      border: `1px solid ${themeStyles.border}`,
+      borderRadius: '6px',
+      minWidth: '280px',
+      maxHeight: '400px',
+      overflowY: 'auto',
+      zIndex: 1000,
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+      marginTop: '4px'
+    },
+    csvOptionHeader: {
+      padding: '12px 16px',
+      borderBottom: `1px solid ${themeStyles.border}`,
+      fontSize: '13px',
+      fontWeight: '600',
+      color: themeStyles.text.primary,
+      backgroundColor: themeStyles.hover.background,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between'
+    },
+    csvOptionItem: {
+      padding: '12px 16px',
+      cursor: 'pointer',
+      borderBottom: `1px solid ${themeStyles.border}`,
+      transition: 'background-color 0.2s',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    },
+    csvOptionItemHover: {
+      backgroundColor: themeStyles.hover.background
+    },
+    csvOptionText: {
+      flex: '1'
+    },
+    csvOptionName: {
+      fontSize: '13px',
+      fontWeight: '500',
+      color: themeStyles.text.primary,
+      marginBottom: '2px'
+    },
+    csvOptionDesc: {
+      fontSize: '11px',
+      color: themeStyles.text.secondary
+    },
+    uploadOptionItem: {
+      padding: '12px 16px',
+      cursor: 'pointer',
+      borderBottom: `1px solid ${themeStyles.border}`,
+      transition: 'background-color 0.2s',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      color: '#2563eb',
+      fontWeight: '500'
+    },
+    noFilesMessage: {
+      padding: '16px',
+      textAlign: 'center',
+      color: themeStyles.text.muted,
+      fontSize: '12px',
+      fontStyle: 'italic'
+    },
+    scanningMessage: {
+      padding: '16px',
+      textAlign: 'center',
+      color: themeStyles.text.secondary,
+      fontSize: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '8px'
+    },
+    scanningSpinner: {
+      width: '14px',
+      height: '14px',
+      border: '2px solid #e5e7eb',
+      borderTop: '2px solid #2563eb',
+      borderRadius: '50%',
+      animation: 'spin 1s linear infinite'
+    },
+    rescanButton: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      padding: '4px 8px',
+      borderRadius: '4px',
+      fontSize: '11px',
+      fontWeight: '500',
+      cursor: 'pointer',
+      border: 'none',
+      transition: 'all 0.2s',
+      backgroundColor: 'transparent',
+      color: themeStyles.text.muted
     }
   };
 
@@ -316,7 +525,7 @@ const UnifiedControlPanel = ({
           <div style={styles.controlGroup} ref={dropdownRef}>
             <div style={styles.searchContainer}>
               <div style={styles.searchInputGroup}>
-                <div style={{ position: 'relative', flex: '1' }}>
+                <div style={styles.searchInputWrapper}>
                   <Search style={styles.searchIcon} size={14} />
                   <input
                     type="text"
@@ -371,7 +580,7 @@ const UnifiedControlPanel = ({
                 </div>
 
                 <div style={styles.ctrlKHint}>
-                  Quick draft: <span style={styles.kbd}>Ctrl+K</span>
+                  Quick: <span style={styles.kbd}>Ctrl+K</span>
                 </div>
               </div>
             </div>
@@ -413,8 +622,119 @@ const UnifiedControlPanel = ({
               title="Restart the entire draft from the beginning"
             >
               <RotateCcw size={14} />
-              Restart Draft
+              Restart
             </button>
+
+            {/* CSV Switch Button */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowCSVOptions(!showCSVOptions)}
+                style={{
+                  ...styles.button,
+                  ...styles.buttonSecondary
+                }}
+                title="Switch to different rankings"
+              >
+                <RefreshCw size={14} />
+                Switch Rankings
+              </button>
+
+              {/* CSV Options Dropdown */}
+              {showCSVOptions && (
+                <div style={styles.csvOptionsDropdown}>
+                  <div style={styles.csvOptionHeader}>
+                    <span>Choose Rankings</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        scanForCSVFiles();
+                      }}
+                      style={{
+                        ...styles.rescanButton,
+                        opacity: isScanning ? 0.6 : 1
+                      }}
+                      disabled={isScanning}
+                      title="Rescan for CSV files"
+                    >
+                      <RefreshCw size={12} style={{
+                        animation: isScanning ? 'spin 1s linear infinite' : 'none'
+                      }} />
+                      Rescan
+                    </button>
+                  </div>
+
+                  {/* Scanning State */}
+                  {isScanning && (
+                    <div style={styles.scanningMessage}>
+                      <div style={styles.scanningSpinner} />
+                      Scanning public/ directory...
+                    </div>
+                  )}
+
+                  {/* No Files Found */}
+                  {!isScanning && availableCSVs.length === 0 && (
+                    <div style={styles.noFilesMessage}>
+                      No CSV files found in public/ directory.
+                      <br />
+                      Place files there and rescan.
+                    </div>
+                  )}
+
+                  {/* Available Files */}
+                  {!isScanning && availableCSVs.length > 0 && (
+                    <>
+                      {availableCSVs.map((preset) => (
+                        <div
+                          key={preset.filename}
+                          style={styles.csvOptionItem}
+                          onClick={() => handlePresetLoad(preset.filename)}
+                          onMouseEnter={(e) => {
+                            Object.assign(e.target.style, styles.csvOptionItemHover);
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.backgroundColor = '';
+                          }}
+                        >
+                          <FileText size={16} color={themeStyles.text.muted} />
+                          <div style={styles.csvOptionText}>
+                            <div style={styles.csvOptionName}>{preset.name}</div>
+                            <div style={styles.csvOptionDesc}>{preset.description}</div>
+                          </div>
+                          {isLoadingPreset && (
+                            <div style={{
+                              width: '12px',
+                              height: '12px',
+                              border: '2px solid #e5e7eb',
+                              borderTop: '2px solid #2563eb',
+                              borderRadius: '50%',
+                              animation: 'spin 1s linear infinite'
+                            }} />
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Upload Custom File */}
+                      <div
+                        style={styles.uploadOptionItem}
+                        onClick={() => {
+                          fileInputRef.current?.click();
+                          setShowCSVOptions(false);
+                        }}
+                        onMouseEnter={(e) => {
+                          Object.assign(e.target.style, styles.csvOptionItemHover);
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.backgroundColor = '';
+                        }}
+                      >
+                        <Upload size={16} />
+                        Upload Custom CSV
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
 
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -438,6 +758,15 @@ const UnifiedControlPanel = ({
           />
         </div>
       </div>
+
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
     </div>
   );
 };
