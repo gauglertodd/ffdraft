@@ -9,6 +9,8 @@ import TeamBoards from './TeamBoards';
 import AutoDraftSettings from './AutoDraftSettings';
 import UnifiedControlPanel from './UnifiedControlPanel';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+
 const DraftTrackerContent = () => {
   const { isDarkMode, toggleTheme, themeStyles } = useTheme();
 
@@ -267,7 +269,7 @@ const DraftTrackerContent = () => {
     try {
       const availablePlayers = players.filter(p => !draftedPlayers.includes(p.id));
 
-      const response = await fetch('http://localhost:5001/predict-availability', {
+      const response = await fetch('${API_URL}/predict-availability', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -300,7 +302,7 @@ const DraftTrackerContent = () => {
         console.warn('Backend API not available for predictions');
         // Don't show alert for automatic predictions, just log
         if (force) {
-          alert('❌ Backend API not available!\n\nTo use availability predictions:\n1. Make sure Python is installed\n2. Install dependencies: pip install flask flask-cors pandas pydantic\n3. Run: python auto_draft_api.py\n4. The server should start on http://localhost:5001');
+          alert('❌ Backend API not available!\n\nTo use availability predictions:\n1. Make sure Python is installed\n2. Install dependencies: pip install flask flask-cors pandas pydantic\n3. Run: python auto_draft_api.py\n4. The server should start on ${API_URL}');
         }
       } else {
         console.error('Failed to predict player availability:', error);
@@ -421,7 +423,7 @@ const DraftTrackerContent = () => {
   // Auto-draft API integration
   const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variability = 0.0) => {
     try {
-      const response = await fetch('http://localhost:5001/auto-draft', {
+      const response = await fetch('${API_URL}/auto-draft', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
