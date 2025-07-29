@@ -269,7 +269,7 @@ const DraftTrackerContent = () => {
     try {
       const availablePlayers = players.filter(p => !draftedPlayers.includes(p.id));
 
-      const response = await fetch('${API_URL}/predict-availability', {
+      const response = await fetch(`${API_URL}/predict-availability`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -423,7 +423,7 @@ const DraftTrackerContent = () => {
   // Auto-draft API integration
   const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variability = 0.0) => {
     try {
-      const response = await fetch('${API_URL}/auto-draft', {
+      const response = await fetch(`${API_URL}/auto-draft`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
