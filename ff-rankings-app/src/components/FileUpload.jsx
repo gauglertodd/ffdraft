@@ -18,15 +18,6 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
     const formats = ['ppr', 'standard', 'half-ppr', 'superflex', 'dynasty'];
     const common = [
       'FantasyPros 2025.csv',
-      'sample_rankings.csv',
-      'draft_rankings.csv',
-      'player_rankings.csv',
-      'rankings.csv',
-      'players.csv',
-      'draft_board.csv',
-      'cheatsheet.csv',
-      'draft.csv',
-      'fantasy.csv'
     ];
 
     const generated = [];
@@ -47,20 +38,6 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
     // Add variations with spaces (like your file)
     const spaceVariations = [
       'FantasyPros 2025 PPR.csv',
-      'FantasyPros 2024 PPR.csv',
-      'FantasyPros 2025 Standard.csv',
-      'FantasyPros 2024 Standard.csv',
-      'ESPN 2025 PPR.csv',
-      'ESPN 2024 PPR.csv',
-      'Yahoo 2025 PPR.csv',
-      'Yahoo 2024 PPR.csv',
-      'Draft Rankings 2025.csv',
-      'Draft Rankings 2024.csv',
-      'Player Rankings.csv',
-      'Fantasy Rankings.csv',
-      'Draft Board.csv',
-      'Cheat Sheet.csv',
-      'My Rankings.csv'
     ];
 
     return [...common, ...generated, ...spaceVariations];
