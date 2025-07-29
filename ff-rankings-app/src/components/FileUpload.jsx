@@ -11,36 +11,41 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
   const [customFileName, setCustomFileName] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
 
-  // Generate comprehensive list of potential CSV filenames
-  const generatePotentialCSVNames = () => {
-    const sources = ['fantasypros', 'espn', 'yahoo', 'sleeper', 'nfl', 'cbs', 'draft', 'rankings'];
-    const years = ['2024', '2025'];
-    const formats = ['ppr', 'standard', 'half-ppr', 'superflex', 'dynasty'];
-    const common = [
-      'FantasyPros 2025.csv',
+  // Hardcoded list of CSV files to check for in public/ directory
+  // Add any filenames you want to support here
+  const csvFilesToCheck = [
+    // FantasyPros variations
+    'FantasyPros 2025 PPR.csv',
+  ];
+
+  // Generate friendly names from filenames
+  const generateFriendlyName = (filename) => {
+    const nameWithoutExt = filename.replace('.csv', '');
+
+    // Handle files with spaces (keep as-is)
+    if (filename.includes(' ')) {
+      return nameWithoutExt;
+    }
+
+    // Handle common patterns with underscores
+    const patterns = [
+      { match: 'fantasypros_', replace: 'FantasyPros ' },
     ];
 
-    const generated = [];
+    let friendlyName = nameWithoutExt;
 
-    // Generate combinations
-    sources.forEach(source => {
-      years.forEach(year => {
-        // Basic: source_year.csv
-        generated.push(`${source}_${year}.csv`);
-
-        // With formats: source_year_format.csv
-        formats.forEach(format => {
-          generated.push(`${source}_${year}_${format}.csv`);
-        });
-      });
+    patterns.forEach(pattern => {
+      if (friendlyName.includes(pattern.match)) {
+        friendlyName = friendlyName.replace(pattern.match, pattern.replace);
+      }
     });
 
-    // Add variations with spaces (like your file)
-    const spaceVariations = [
-      'FantasyPros 2025 PPR.csv',
-    ];
-
-    return [...common, ...generated, ...spaceVariations];
+    // Replace remaining underscores with spaces and capitalize
+    return friendlyName
+      .replace(/_/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
 
   // Scan for available CSV files in the public directory
@@ -50,32 +55,26 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
     const foundFiles = [];
 
     console.log('🔍 Scanning for CSV files in public directory...');
+    console.log(`Checking ${csvFilesToCheck.length} specific filenames...`);
 
-    const potentialNames = generatePotentialCSVNames();
-    console.log(`Checking ${potentialNames.length} potential filenames...`);
-
-    // Check each potential filename
-    for (const filename of potentialNames) {
+    // Check each filename in our hardcoded list
+    for (const filename of csvFilesToCheck) {
       try {
         const response = await fetch(`/${filename}`, { method: 'HEAD' });
         if (response.ok) {
           console.log(`✅ Found: ${filename}`);
 
-          // Try to get a preview of the file to extract more info
+          // Try to get a preview of the file to extract player count
           try {
             const previewResponse = await fetch(`/${filename}`);
             const csvText = await previewResponse.text();
             const lines = csvText.split('\n').filter(line => line.trim());
             const playerCount = Math.max(0, lines.length - 1); // Subtract header row
 
-            // Generate a friendly name and description
-            const friendlyName = generateFriendlyName(filename);
-            const description = `${playerCount} players`;
-
             foundFiles.push({
               filename,
-              name: friendlyName,
-              description,
+              name: generateFriendlyName(filename),
+              description: `${playerCount} players`,
               playerCount
             });
           } catch (previewError) {
@@ -90,11 +89,12 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
         }
       } catch (error) {
         // File doesn't exist or isn't accessible, skip silently
+        console.log(`❌ Not found: ${filename}`);
       }
     }
 
     if (foundFiles.length === 0) {
-      setScanError('No CSV files found in the public directory. Place your CSV files in the public/ folder and refresh.');
+      setScanError('No CSV files found. Place your CSV files in the public/ folder and click "Rescan", or use "Custom File" to load any filename.');
     }
 
     // Sort by name for better organization
@@ -104,39 +104,6 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
     setIsScanning(false);
 
     console.log(`📊 Scan complete: Found ${foundFiles.length} CSV files`);
-  };
-
-  // Generate friendly names from filenames
-  const generateFriendlyName = (filename) => {
-    const nameWithoutExt = filename.replace('.csv', '');
-
-    // Handle files with spaces (like "FantasyPros 2025 PPR.csv")
-    if (filename.includes(' ')) {
-      return nameWithoutExt; // Keep as-is for spaced names
-    }
-
-    // Handle common patterns with underscores
-    if (nameWithoutExt.includes('fantasypros')) {
-      return nameWithoutExt.replace('fantasypros_', 'FantasyPros ').replace(/_/g, ' ');
-    }
-    if (nameWithoutExt.includes('espn')) {
-      return nameWithoutExt.replace('espn_', 'ESPN ').replace(/_/g, ' ');
-    }
-    if (nameWithoutExt.includes('yahoo')) {
-      return nameWithoutExt.replace('yahoo_', 'Yahoo ').replace(/_/g, ' ');
-    }
-    if (nameWithoutExt.includes('sleeper')) {
-      return nameWithoutExt.replace('sleeper_', 'Sleeper ').replace(/_/g, ' ');
-    }
-    if (nameWithoutExt.includes('sample')) {
-      return 'Sample Rankings';
-    }
-
-    // Default: capitalize and replace underscores
-    return nameWithoutExt
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
   };
 
   // Scan for files on component mount
@@ -205,7 +172,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
         handlePresetLoad(filename);
         setCustomFileName('');
         setShowCustomInput(false);
-        // Rescan to add it to the list
+        // Rescan to potentially add it to the list if it matches our hardcoded names
         scanForCSVFiles();
       } else {
         alert(`File "${filename}" not found in public/ directory (Status: ${response.status})`);
@@ -551,6 +518,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
         </ul>
         <div style={styles.optionalNote}>
           💡 <strong>Tip:</strong> Adding a "tier" column enables tier-based draft strategies.
+          Tiers group players of similar value (e.g., Tier 1 = elite players, Tier 2 = very good players, etc.)
         </div>
       </div>
 
@@ -571,7 +539,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
                 ...styles.customButton,
                 opacity: showCustomInput ? 0.8 : 1
               }}
-              title="Try a specific filename"
+              title="Load any CSV file by name"
             >
               <Plus size={14} />
               Custom File
@@ -594,10 +562,14 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
           </div>
         </div>
 
+        <p style={styles.presetSubtitle}>
+          Automatically detects common CSV filenames in your public/ directory. Use "Custom File" to load any other CSV file.
+        </p>
+
         {/* Custom File Input */}
         {showCustomInput && (
           <div style={styles.customFileSection}>
-            <div style={styles.customFileTitle}>Load Specific File</div>
+            <div style={styles.customFileTitle}>Load Any CSV File</div>
             <input
               type="text"
               placeholder="Enter exact filename (e.g., 'FantasyPros 2025 PPR.csv')"
@@ -638,7 +610,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
         {isScanning && (
           <div style={styles.scanningMessage}>
             <div style={styles.scanningSpinner} />
-            Scanning for CSV files in public/ directory...
+            Checking {csvFilesToCheck.length} specific filenames...
           </div>
         )}
 
@@ -653,9 +625,10 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
         {!isScanning && !scanError && availableCSVs.length === 0 && (
           <div style={styles.noFilesMessage}>
             <div style={styles.noFilesTitle}>No CSV files found</div>
-            <p>Place your CSV files in the <code>public/</code> directory and click "Rescan", or use "Custom File" to load a specific filename.</p>
-            <p style={{ fontSize: '12px', marginTop: '8px', color: themeStyles.text.muted }}>
-              Checked {generatePotentialCSVNames().length} common filename patterns.
+            <p>Place your CSV files in the <code>public/</code> directory using one of the supported filenames, or use "Custom File" to load any CSV.</p>
+            <p style={{ fontSize: '12px', marginTop: '12px', color: themeStyles.text.muted }}>
+              <strong>Supported filenames include:</strong><br/>
+              FantasyPros 2025 PPR.csv, ESPN 2024.csv, Yahoo 2025 PPR.csv, sample_rankings.csv, and {csvFilesToCheck.length - 4} others.
             </p>
           </div>
         )}
@@ -694,11 +667,9 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
                   <div style={styles.presetName}>{preset.name}</div>
                   <div style={styles.presetDescription}>
                     {preset.description}
-                    {preset.filename && (
-                      <div style={{ fontSize: '11px', color: themeStyles.text.muted, marginTop: '4px' }}>
-                        {preset.filename}
-                      </div>
-                    )}
+                    <div style={{ fontSize: '11px', color: themeStyles.text.muted, marginTop: '4px' }}>
+                      {preset.filename}
+                    </div>
                   </div>
 
                   {isLoading && (
