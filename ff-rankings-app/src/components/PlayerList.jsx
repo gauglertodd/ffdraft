@@ -38,23 +38,56 @@ const PlayerList = ({
 }) => {
   const [isCondensedMode, setIsCondensedMode] = React.useState(false);
 
-  // Helper functions - defined first
+  // Generate tabs based on actual positions found in the data
   const getMainPositionTabs = () => {
-    const mainPositions = ['QB', 'RB', 'WR', 'TE'].filter(pos => positions.includes(pos));
-    return ['overall', ...mainPositions, 'qb-wr-rb-te'];
+    // All possible main positions we want to show as tabs
+    const possiblePositions = ['QB', 'RB', 'WR', 'TE', 'DST', 'K'];
+
+    // Debug: Log what positions we have
+    console.log('🔍 PlayerList positions array:', positions);
+    console.log('🔍 Checking for each position:');
+
+    // Filter to only include positions that actually exist in the data
+    // Note: positions array includes 'ALL' as first element, so we need to check the rest
+    const actualPositions = possiblePositions.filter(pos => {
+      const hasPosition = positions.includes(pos);
+      console.log(`  ${pos}: ${hasPosition ? '✅ found' : '❌ missing'}`);
+      return hasPosition;
+    });
+
+    console.log('📋 Final position tabs to show:', actualPositions);
+
+    // Check if we have the flex-eligible positions
+    const hasFlexPositions = ['RB', 'WR', 'TE'].some(pos => positions.includes(pos));
+
+    // Always include overall, then the actual positions, then FLEX (if applicable), then skill positions combo
+    const tabs = ['overall', ...actualPositions];
+
+    if (hasFlexPositions) {
+      tabs.push('FLEX');
+    }
+
+    tabs.push('skill-positions');
+
+    const finalTabs = tabs;
+    console.log('🎯 Complete tab list:', finalTabs);
+
+    return finalTabs;
   };
 
   const getTabLabel = (tab) => {
     switch (tab) {
       case 'overall': return 'Overall';
-      case 'qb-wr-rb-te': return 'QB/RB/WR/TE';
+      case 'skill-positions': return 'QB/RB/WR/TE';
+      case 'FLEX': return 'FLEX (RB/WR/TE)';
       default: return tab;
     }
   };
 
   const getPositionsForTab = (tab) => {
     switch (tab) {
-      case 'qb-wr-rb-te': return ['QB', 'RB', 'WR', 'TE'];
+      case 'skill-positions': return ['QB', 'RB', 'WR', 'TE'];
+      case 'FLEX': return ['RB', 'WR', 'TE'];
       default: return [];
     }
   };
@@ -82,6 +115,27 @@ const PlayerList = ({
     });
   };
 
+  // For FLEX tab, get filtered players from multiple positions
+  const getFilteredPlayersForFlex = () => {
+    const flexPositions = ['RB', 'WR', 'TE'];
+    let allFlexPlayers = [];
+
+    flexPositions.forEach(position => {
+      const posPlayers = playersByPosition[position] || [];
+      const filteredPosPlayers = posPlayers.filter(player => {
+        const matchesSearch = searchQuery === '' ||
+          player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          player.team.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesDrafted = showDrafted || !draftedPlayers.includes(player.id);
+        return matchesSearch && matchesDrafted;
+      });
+      allFlexPlayers = [...allFlexPlayers, ...filteredPosPlayers];
+    });
+
+    // Sort by overall rank to maintain proper FLEX ranking
+    return allFlexPlayers.sort((a, b) => a.rank - b.rank);
+  };
+
   const styles = {
     card: {
       ...themeStyles.card,
@@ -93,7 +147,9 @@ const PlayerList = ({
       borderBottomWidth: '1px',
       borderBottomStyle: 'solid',
       borderBottomColor: themeStyles.border,
-      marginBottom: '16px'
+      marginBottom: '16px',
+      overflowX: 'auto',
+      flexWrap: 'nowrap'
     },
     tab: {
       padding: '8px 16px',
@@ -102,7 +158,9 @@ const PlayerList = ({
       borderBottomStyle: 'solid',
       borderBottomColor: 'transparent',
       fontSize: '14px',
-      fontWeight: '500'
+      fontWeight: '500',
+      whiteSpace: 'nowrap',
+      flexShrink: 0
     },
     tabActive: {
       borderBottomColor: '#2563eb',
@@ -673,13 +731,18 @@ const PlayerList = ({
 
   // Render the standard single-column view
   const renderStandardView = () => {
+    // For FLEX tab, use special filtered players
+    const playersToShow = activeTab === 'FLEX' ? getFilteredPlayersForFlex() : filteredPlayers;
+
     return (
       <div style={styles.playersList}>
-        {filteredPlayers.map((player) => {
+        {playersToShow.map((player) => {
           const isDrafted = draftedPlayers.includes(player.id);
           const isUndrafted = !isDrafted;
           const isWatched = isPlayerWatched(player.id);
-          const displayRank = activeTab === 'overall' ? player.rank : (player.positionRank || player.rank);
+
+          // For FLEX tab, show overall rank since we're mixing positions
+          const displayRank = (activeTab === 'overall' || activeTab === 'FLEX') ? player.rank : (player.positionRank || player.rank);
 
           return (
             <div
@@ -734,7 +797,7 @@ const PlayerList = ({
                           size="small"
                           style="badge"
                         />
-                        {activeTab !== 'overall' && (
+                        {(activeTab !== 'overall' && activeTab !== 'FLEX') && (
                           <span style={{ marginLeft: '8px', color: themeStyles.text.muted }}>
                             (#{player.rank} overall)
                           </span>
@@ -775,7 +838,7 @@ const PlayerList = ({
                         size="small"
                         style="badge"
                       />
-                      {activeTab !== 'overall' && (
+                      {(activeTab !== 'overall' && activeTab !== 'FLEX') && (
                         <span style={{ fontSize: '10px', color: themeStyles.text.muted }}>
                           #{player.rank}
                         </span>
@@ -1136,12 +1199,12 @@ const PlayerList = ({
       </div>
 
       {/* Content based on active tab */}
-      {activeTab === 'qb-wr-rb-te' ?
+      {(activeTab === 'skill-positions' || activeTab === 'FLEX') ?
         renderPositionGridView(getPositionsForTab(activeTab)) :
         renderStandardView()}
 
       {/* Empty state for search results */}
-      {activeTab !== 'qb-wr-rb-te' && filteredPlayers.length === 0 && searchQuery && (
+      {(activeTab !== 'skill-positions' && activeTab !== 'FLEX') && filteredPlayers.length === 0 && searchQuery && (
         <div style={styles.emptyState}>
           No players found matching "{searchQuery}"
         </div>
