@@ -11,64 +11,15 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
 
   // Hardcoded list of CSV files to check for in public/ directory
   const csvFilesToCheck = [
-    // FantasyPros variations
     'FantasyPros 2025 PPR.csv',
-    'FantasyPros 2024 PPR.csv',
-    'FantasyPros 2025 Standard.csv',
-    'FantasyPros 2024 Standard.csv',
-    'fantasypros_2025_ppr.csv',
-    'fantasypros_2024_ppr.csv',
-    'fantasypros_2025.csv',
-    'fantasypros_2024.csv',
-
-    // ESPN variations
-    'ESPN 2025 PPR.csv',
-    'ESPN 2024 PPR.csv',
-    'ESPN 2025.csv',
-    'ESPN 2024.csv',
-    'espn_2025_ppr.csv',
-    'espn_2024_ppr.csv',
-    'espn_2025.csv',
-    'espn_2024.csv',
-
-    // Yahoo variations
-    'Yahoo 2025 PPR.csv',
-    'Yahoo 2024 PPR.csv',
-    'Yahoo 2025.csv',
-    'Yahoo 2024.csv',
-    'yahoo_2025_ppr.csv',
-    'yahoo_2024_ppr.csv',
-    'yahoo_2025.csv',
-    'yahoo_2024.csv',
-
-    // Sleeper variations
-    'Sleeper 2025.csv',
-    'Sleeper 2024.csv',
-    'sleeper_2025.csv',
-    'sleeper_2024.csv',
-
-    // Generic variations
-    'Draft Rankings 2025.csv',
-    'Draft Rankings 2024.csv',
-    'Player Rankings 2025.csv',
-    'Player Rankings 2024.csv',
-    'Fantasy Rankings.csv',
-    'Draft Board.csv',
-    'Cheat Sheet.csv',
-    'My Rankings.csv',
-
-    // Simple names
-    'sample_rankings.csv',
-    'draft_rankings.csv',
-    'player_rankings.csv',
-    'rankings.csv',
-    'players.csv',
-    'draft_board.csv',
-    'cheatsheet.csv',
-    'draft.csv',
-    'fantasy.csv',
-    'test.csv'
-  ];
+    '4for4 Underdog ADP.csv',
+    'BB10s ADP.csv',
+    'CBS ADP.csv',
+    'ESPN ADP.csv',
+    'FFPC ADP.csv',
+    'Y! ADP.csv',
+    'LateRoundDraft.csv'
+   ];
 
   // Generate friendly names from filenames
   const generateFriendlyName = (filename) => {
@@ -508,7 +459,6 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
         </ul>
         <div style={styles.optionalNote}>
           💡 <strong>Pro Tip:</strong> Adding a "tier" column enables advanced tier-based draft strategies.
-          Tiers group players of similar value (e.g., Tier 1 = elite players, Tier 2 = very good players, etc.)
         </div>
       </div>
 

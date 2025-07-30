@@ -45,6 +45,13 @@ const UnifiedControlPanel = ({
   // Common CSV filenames to check for
   const commonCSVNames = [
     'FantasyPros 2025 PPR.csv',
+    '4for4 Underdog ADP.csv',
+    'BB10s ADP.csv',
+    'CBS ADP.csv',
+    'ESPN ADP.csv',
+    'FFPC ADP.csv',
+    'Y! ADP.csv',
+    'LateRoundDraft.csv'
   ];
 
   // Generate friendly names from filenames
