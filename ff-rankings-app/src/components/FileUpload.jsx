@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Upload, FileText, Info, RefreshCw, Plus } from 'lucide-react';
+import { Upload, FileText, Info } from 'lucide-react';
 
 const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) => {
   const fileInputRef = useRef(null);
@@ -104,7 +104,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
     }
 
     if (foundFiles.length === 0) {
-      setScanError('No CSV files found. Place your CSV files in the public/ folder and click "Rescan".');
+      setScanError('No CSV files found.');
     }
 
     // Sort by name for better organization
@@ -145,36 +145,6 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
       setIsLoadingPreset(false);
       setSelectedPreset('');
     }
-  };
-
-  const handleCustomFileTest = async () => {
-    if (!customFileName.trim()) return;
-
-    const filename = customFileName.trim();
-    if (!filename.endsWith('.csv')) {
-      alert('Please include .csv extension');
-      return;
-    }
-
-    try {
-      const response = await fetch(`/${filename}`, { method: 'HEAD' });
-      if (response.ok) {
-        console.log(`✅ Custom file found: ${filename}`);
-        handlePresetLoad(filename);
-        setCustomFileName('');
-        setShowCustomInput(false);
-        // Rescan to potentially add it to the list if it matches our hardcoded names
-        scanForCSVFiles();
-      } else {
-        alert(`File "${filename}" not found in public/ directory (Status: ${response.status})`);
-      }
-    } catch (error) {
-      alert(`Error checking file "${filename}": ${error.message}`);
-    }
-  };
-
-  const handleRescan = () => {
-    scanForCSVFiles();
   };
 
   const styles = {
@@ -276,7 +246,9 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
       color: isDragOver ? '#2563eb' : themeStyles.text.primary,
       transition: 'all 0.2s',
       width: '100%',
-      minHeight: '80px'
+      minHeight: '80px',
+      margin: '0 auto',
+      boxSizing: 'border-box'
     },
     presetSection: {
       backgroundColor: themeStyles.card.backgroundColor,
@@ -287,42 +259,15 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
     presetHeader: {
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      justifyContent: 'center',
       marginBottom: '16px'
     },
     presetTitle: {
       fontSize: '20px',
       fontWeight: '600',
       color: themeStyles.text.primary,
-      margin: '0'
-    },
-    rescanButton: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      padding: '8px 12px',
-      borderRadius: '6px',
-      fontSize: '13px',
-      fontWeight: '500',
-      cursor: 'pointer',
-      border: 'none',
-      transition: 'all 0.2s',
-      backgroundColor: themeStyles.button.secondary.backgroundColor,
-      color: themeStyles.button.secondary.color
-    },
-    presetSubtitle: {
-      color: themeStyles.text.secondary,
-      fontSize: '15px',
-      marginBottom: '24px',
-      lineHeight: '1.5'
-    },
-    customFileSection: {
-      backgroundColor: themeStyles.hover.background,
-      border: `1px solid ${themeStyles.border}`,
-      borderRadius: '8px',
-      padding: '20px',
-      marginBottom: '24px',
-      textAlign: 'left'
+      margin: '0',
+      textAlign: 'center'
     },
     scanningMessage: {
       padding: '40px 20px',
@@ -506,27 +451,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
       <div style={styles.presetSection}>
         <div style={styles.presetHeader}>
           <h2 style={styles.presetTitle}>Pre-loaded Rankings</h2>
-          <button
-            onClick={handleRescan}
-            disabled={isScanning}
-            style={{
-              ...styles.rescanButton,
-              opacity: isScanning ? 0.6 : 1,
-              cursor: isScanning ? 'not-allowed' : 'pointer'
-            }}
-            title="Rescan for CSV files"
-          >
-            <RefreshCw size={14} style={{
-              animation: isScanning ? 'spin 1s linear infinite' : 'none'
-            }} />
-            {isScanning ? 'Scanning...' : 'Rescan'}
-          </button>
         </div>
-
-        <p style={styles.presetSubtitle}>
-          Rankings files automatically detected in your public/ directory.
-          Place CSV files there and click "Rescan" to refresh this list.
-        </p>
 
         {/* Scanning State */}
         {isScanning && (
@@ -547,7 +472,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
         {!isScanning && !scanError && availableCSVs.length === 0 && (
           <div style={styles.noFilesMessage}>
             <div style={styles.noFilesTitle}>No Pre-loaded Rankings Found</div>
-            <p>Place CSV files in your <code>public/</code> directory using supported filenames and click "Rescan".</p>
+            <p>Place CSV files in your <code>public/</code> directory using supported filenames.</p>
             <p style={{ fontSize: '13px', marginTop: '12px', color: themeStyles.text.muted }}>
               <strong>Supported filenames include:</strong><br/>
               FantasyPros 2025 PPR.csv, ESPN 2024.csv, Yahoo 2025 PPR.csv, sample_rankings.csv, and {csvFilesToCheck.length - 4} others.
