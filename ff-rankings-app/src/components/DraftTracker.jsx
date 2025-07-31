@@ -1,13 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import FileUpload from './FileUpload';
-import LeagueSettings from './LeagueSettings';
-import SearchControls from './SearchControls';
-import DraftStats from './DraftStats';
 import PlayerList from './PlayerList';
 import TeamBoards from './TeamBoards';
-import AutoDraftSettings from './AutoDraftSettings';
 import UnifiedControlPanel from './UnifiedControlPanel';
+import UnifiedSettingsPanel from './UnifiedSettingsPanel';
 
 const DraftTrackerContent = () => {
   const { isDarkMode, toggleTheme, themeStyles } = useTheme();
@@ -163,7 +160,7 @@ const DraftTrackerContent = () => {
     }
 
     const savedState = loadDraftState();
-    if (savedState) {
+    if (savedState && savedState.players && savedState.players.length > 0) {
       console.log('📂 Restoring saved draft state...');
 
       // Restore all state
@@ -195,13 +192,28 @@ const DraftTrackerContent = () => {
             `📂 Found saved draft with ${savedState.draftedPlayers.length} picks from ${lastSaved}.\n\nContinue with this draft?`
           );
           if (!confirmed) {
-            // User wants to start fresh
-            handleNewDraft();
+            // User wants to start fresh - clear everything and show upload screen
+            setPlayers([]);
+            setDraftedPlayers([]);
+            setCurrentDraftPick(1);
+            setWatchedPlayers([]);
+            setCurrentCSVSource('');
+            clearDraftState();
           }
         }, 500);
+      } else {
+        // If there are players but no draft picks, just restore silently
+        hasShownRestoreDialogRef.current = true;
       }
     } else {
-      console.log('No saved draft state found - starting fresh');
+      console.log('No saved draft state with players found - showing upload screen');
+      // Clear any incomplete saved state and ensure we show upload screen
+      if (savedState) {
+        clearDraftState();
+      }
+      // Ensure players array is empty to show upload screen
+      setPlayers([]);
+      hasShownRestoreDialogRef.current = true;
     }
   }, []); // Empty dependency array - only run on mount
 
@@ -1626,14 +1638,14 @@ const DraftTrackerContent = () => {
             draftStyle={draftStyle}
           />
 
-          {/* Auto-Draft Settings */}
-          <AutoDraftSettings
+          {/* Unified Settings Panel */}
+          <UnifiedSettingsPanel
+            // Auto-draft props
             numTeams={numTeams}
             autoDraftSettings={autoDraftSettings}
             setAutoDraftSettings={setAutoDraftSettings}
             isAutoDrafting={isAutoDrafting}
             setIsAutoDrafting={setIsAutoDrafting}
-            themeStyles={themeStyles}
             isDraftRunning={isDraftRunning}
             startDraftSequence={startDraftSequence}
             draftSpeed={draftSpeed}
@@ -1644,24 +1656,17 @@ const DraftTrackerContent = () => {
             setTeamNames={setTeamNames}
             teamVariability={teamVariability}
             setTeamVariability={setTeamVariability}
-          />
-
-          {/* League Settings */}
-          <LeagueSettings
-            numTeams={numTeams}
+            // League settings props
             setNumTeams={setNumTeams}
             rosterSettings={rosterSettings}
             setRosterSettings={setRosterSettings}
             positionColors={positionColors}
             setPositionColors={setPositionColors}
-            themeStyles={themeStyles}
-          />
-
-          {/* Draft Statistics Chart */}
-          <DraftStats
+            // Draft stats props
             draftStats={draftStats}
             draftedPlayers={draftedPlayers}
             players={players}
+            // Theme
             themeStyles={themeStyles}
           />
 

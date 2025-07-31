@@ -1,13 +1,34 @@
 import React from 'react';
 
-const DraftStats = ({ draftStats, draftedPlayers, players, themeStyles }) => {
-  const styles = {
-    card: {
+const DraftStats = ({
+  draftStats,
+  draftedPlayers,
+  players,
+  themeStyles,
+  isEmbedded = false // New prop to determine if this is embedded in UnifiedSettingsPanel
+}) => {
+  const cardStyles = {
+    card: isEmbedded ? {} : {
       ...themeStyles.card,
       borderRadius: '8px',
       padding: '24px',
       marginBottom: '32px'
     },
+    title: isEmbedded ? {
+      fontSize: '16px',
+      fontWeight: '600',
+      marginBottom: '16px',
+      color: themeStyles.text.primary
+    } : {
+      fontSize: '20px',
+      fontWeight: '600',
+      marginBottom: '16px',
+      color: themeStyles.text.primary
+    }
+  };
+
+  const styles = {
+    ...cardStyles,
     statsContainer: {
       marginBottom: '16px'
     },
@@ -49,12 +70,17 @@ const DraftStats = ({ draftStats, draftedPlayers, players, themeStyles }) => {
       width: '64px',
       fontSize: '14px',
       color: themeStyles.text.secondary
+    },
+    totalStats: {
+      marginTop: '16px',
+      fontSize: '14px',
+      color: themeStyles.text.secondary
     }
   };
 
-  return (
-    <div style={styles.card}>
-      <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px', color: themeStyles.text.primary }}>Draft Progress by Position</h2>
+  const ComponentContent = () => (
+    <>
+      <h2 style={styles.title}>Draft Progress by Position</h2>
       <div style={styles.statsContainer}>
         {Object.entries(draftStats).map(([position, stats]) => (
           <div key={position} style={styles.statRow}>
@@ -76,9 +102,19 @@ const DraftStats = ({ draftStats, draftedPlayers, players, themeStyles }) => {
           </div>
         ))}
       </div>
-      <div style={{ marginTop: '16px', fontSize: '14px', color: themeStyles.text.secondary }}>
+      <div style={styles.totalStats}>
         Total Drafted: {draftedPlayers.length} / {players.length}
       </div>
+    </>
+  );
+
+  if (isEmbedded) {
+    return <ComponentContent />;
+  }
+
+  return (
+    <div style={styles.card}>
+      <ComponentContent />
     </div>
   );
 };

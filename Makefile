@@ -27,17 +27,6 @@ help: ## Show this help message
 ff: ## 🚀 Start both Python backend and React frontend
 	@echo "$(CYAN)Starting Fantasy Football Draft Tracker...$(RESET)"
 	@$(MAKE) check-deps
-	@echo "$(YELLOW)Starting Python backend...$(RESET)"
-	@bash -c 'cd $(BACKEND_DIR) && conda run -n $(CONDA_ENV) python auto_draft_api.py' > $(BACKEND_DIR)/backend.log 2>&1 &
-	@sleep 3
-	@echo "$(YELLOW)Checking if Python backend started...$(RESET)"
-	@if curl -s http://localhost:5001/health >/dev/null 2>&1; then \
-		echo "$(GREEN)✅ Python backend is running$(RESET)"; \
-	else \
-		echo "$(RED)❌ Python backend failed to start$(RESET)"; \
-		echo "$(BLUE)Check logs: tail -f $(BACKEND_DIR)/backend.log$(RESET)"; \
-		exit 1; \
-	fi
 	@echo "$(YELLOW)Starting React frontend...$(RESET)"
 	@cd $(FRONTEND_DIR) && npm run dev &
 	@echo "$(GREEN)✅ Both servers started!$(RESET)"
@@ -105,7 +94,7 @@ frontend: ## ⚛️ Start only React frontend
 	@$(MAKE) check-node-deps
 	@cd $(FRONTEND_DIR) && npm run dev
 
-check-deps: check-conda-env check-python-files check-node-deps ## Check all dependencies
+check-deps: check-node-deps ## Check all dependencies
 
 check-conda-env: ## Check if conda environment exists
 	@if ! conda env list | grep -q "^$(CONDA_ENV) "; then \

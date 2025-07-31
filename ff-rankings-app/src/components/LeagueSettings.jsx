@@ -8,17 +8,18 @@ const LeagueSettings = ({
   setRosterSettings,
   positionColors,
   setPositionColors,
-  themeStyles
+  themeStyles,
+  isEmbedded = false // New prop to determine if this is embedded in UnifiedSettingsPanel
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const styles = {
-    card: {
+  const cardStyles = {
+    card: isEmbedded ? {} : {
       ...themeStyles.card,
       borderRadius: '8px',
       marginBottom: '32px'
     },
-    header: {
+    header: isEmbedded ? {} : {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -26,7 +27,7 @@ const LeagueSettings = ({
       cursor: 'pointer',
       borderBottom: isExpanded ? `1px solid ${themeStyles.border}` : 'none'
     },
-    title: {
+    title: isEmbedded ? {} : {
       fontSize: '18px',
       fontWeight: '600',
       display: 'flex',
@@ -34,7 +35,7 @@ const LeagueSettings = ({
       gap: '8px',
       color: themeStyles.text.primary
     },
-    expandButton: {
+    expandButton: isEmbedded ? {} : {
       padding: '6px 12px',
       borderRadius: '6px',
       fontSize: '12px',
@@ -45,12 +46,16 @@ const LeagueSettings = ({
       cursor: 'pointer',
       transition: 'all 0.2s'
     },
-    content: {
+    content: isEmbedded ? {} : {
       padding: isExpanded ? '24px' : '0',
       maxHeight: isExpanded ? '500px' : '0',
       overflow: 'hidden',
       transition: 'all 0.3s ease'
-    },
+    }
+  };
+
+  const styles = {
+    ...cardStyles,
     settingsGrid: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
@@ -87,6 +92,57 @@ const LeagueSettings = ({
     }
   };
 
+  const ComponentContent = () => (
+    <div style={styles.settingsGrid}>
+      <div style={styles.settingsItem}>
+        <label style={styles.settingsLabel}>Teams</label>
+        <select
+          value={numTeams}
+          onChange={(e) => setNumTeams(parseInt(e.target.value))}
+          style={styles.select}
+        >
+          {[8, 10, 12, 14, 16].map(num => (
+            <option key={num} value={num}>{num}</option>
+          ))}
+        </select>
+      </div>
+
+      {Object.entries(rosterSettings).map(([position, count]) => (
+        <div key={position} style={styles.settingsItem}>
+          <label style={styles.settingsLabel}>{position}</label>
+          <div style={styles.colorInputContainer}>
+            <select
+              value={count}
+              onChange={(e) => setRosterSettings({
+                ...rosterSettings,
+                [position]: parseInt(e.target.value)
+              })}
+              style={{ ...styles.select, flex: '1' }}
+            >
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(num => (
+                <option key={num} value={num}>{num}</option>
+              ))}
+            </select>
+            <input
+              type="color"
+              value={positionColors[position]}
+              onChange={(e) => setPositionColors({
+                ...positionColors,
+                [position]: e.target.value
+              })}
+              style={styles.colorPicker}
+              title={`${position} color`}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (isEmbedded) {
+    return <ComponentContent />;
+  }
+
   return (
     <div style={styles.card}>
       <div style={styles.header} onClick={() => setIsExpanded(!isExpanded)}>
@@ -100,50 +156,7 @@ const LeagueSettings = ({
       </div>
 
       <div style={styles.content}>
-        <div style={styles.settingsGrid}>
-          <div style={styles.settingsItem}>
-            <label style={styles.settingsLabel}>Teams</label>
-            <select
-              value={numTeams}
-              onChange={(e) => setNumTeams(parseInt(e.target.value))}
-              style={styles.select}
-            >
-              {[8, 10, 12, 14, 16].map(num => (
-                <option key={num} value={num}>{num}</option>
-              ))}
-            </select>
-          </div>
-
-          {Object.entries(rosterSettings).map(([position, count]) => (
-            <div key={position} style={styles.settingsItem}>
-              <label style={styles.settingsLabel}>{position}</label>
-              <div style={styles.colorInputContainer}>
-                <select
-                  value={count}
-                  onChange={(e) => setRosterSettings({
-                    ...rosterSettings,
-                    [position]: parseInt(e.target.value)
-                  })}
-                  style={{ ...styles.select, flex: '1' }}
-                >
-                  {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(num => (
-                    <option key={num} value={num}>{num}</option>
-                  ))}
-                </select>
-                <input
-                  type="color"
-                  value={positionColors[position]}
-                  onChange={(e) => setPositionColors({
-                    ...positionColors,
-                    [position]: e.target.value
-                  })}
-                  style={styles.colorPicker}
-                  title={`${position} color`}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+        <ComponentContent />
       </div>
     </div>
   );
