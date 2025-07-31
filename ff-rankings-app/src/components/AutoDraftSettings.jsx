@@ -174,13 +174,19 @@ const AutoDraftSettings = ({
       borderWidth: '1px',
       borderStyle: 'solid',
       borderColor: themeStyles.border,
-      backgroundColor: themeStyles.hover.background
+      backgroundColor: themeStyles.hover.background,
+      // Ensure the card contains its children properly
+      overflow: 'hidden',
+      boxSizing: 'border-box'
     },
     teamHeader: {
       fontSize: '14px',
       fontWeight: '600',
       color: themeStyles.text.primary,
-      marginBottom: '8px'
+      marginBottom: '8px',
+      // Ensure header contains the input properly
+      width: '100%',
+      boxSizing: 'border-box'
     },
     teamNameInput: {
       backgroundColor: themeStyles.input.backgroundColor,
@@ -191,10 +197,13 @@ const AutoDraftSettings = ({
       padding: '6px 8px',
       fontSize: '12px',
       borderRadius: '4px',
-      width: '100%',
+      width: '100%', // Full width of container
       fontWeight: '600',
       textAlign: 'center',
-      marginBottom: '8px'
+      marginBottom: '8px',
+      boxSizing: 'border-box', // Include padding/border in width
+      minWidth: 0, // Allow shrinking
+      maxWidth: '100%' // Don't exceed container
     }
   };
 
@@ -338,8 +347,31 @@ const AutoDraftSettings = ({
                       setTeamNames({ ...teamNames, [teamId]: newName });
                     }}
                     onBlur={(e) => {
+                      // Only reset to default if the field is completely empty after losing focus
+                      // and user isn't actively editing another field
                       if (!e.target.value.trim()) {
-                        setTeamNames({ ...teamNames, [teamId]: `Team ${teamId}` });
+                        setTimeout(() => {
+                          // Check if user has moved focus to another input
+                          const activeElement = document.activeElement;
+                          const isEditingAnotherTeamName = activeElement &&
+                            activeElement.type === 'text' &&
+                            activeElement !== e.target;
+
+                          // Only reset if user isn't editing another team name
+                          if (!isEditingAnotherTeamName) {
+                            setTeamNames(prev => ({ ...prev, [teamId]: `Team ${teamId}` }));
+                          }
+                        }, 150);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.target.blur();
+                      }
+                      // Allow users to clear the field completely without immediate reset
+                      if (e.key === 'Escape') {
+                        e.target.value = `Team ${teamId}`;
+                        e.target.blur();
                       }
                     }}
                     placeholder={`Team ${teamId}`}

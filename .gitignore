@@ -5,6 +5,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # macOS system files
+ff-rankings-app/src/.DS_Store
 .DS_Store
 .DS_Store?
 ._*

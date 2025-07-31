@@ -1,16 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw } from 'lucide-react';
+import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw, Save, Trash2, Plus } from 'lucide-react';
 
 const UnifiedControlPanel = ({
-  // Removed: theme, view, prediction, and watch controls - now in PlayerList
   themeStyles,
-
-  // Draft controls
   undoLastDraft,
   draftedPlayers,
   onNewCSV,
-
-  // Search controls
   searchQuery,
   setSearchQuery,
   selectedPosition,
@@ -18,15 +13,14 @@ const UnifiedControlPanel = ({
   positions,
   players,
   draftPlayer,
-
-  // Draft status and restart
   currentDraftPick,
   currentTeam,
   teamNames,
   onRestartDraft,
-
-  // New: CSV switching functionality
-  onSwitchCSV
+  onSwitchCSV,
+  onNewDraft,
+  onSaveDraft,
+  onClearSavedState
 }) => {
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -41,6 +35,10 @@ const UnifiedControlPanel = ({
   const [isLoadingPreset, setIsLoadingPreset] = useState(false);
   const [availableCSVs, setAvailableCSVs] = useState([]);
   const [isScanning, setIsScanning] = useState(false);
+
+  // Save state tracking
+  const [lastSaveTime, setLastSaveTime] = useState(null);
+  const [showSaveOptions, setShowSaveOptions] = useState(false);
 
   // Common CSV filenames to check for
   const commonCSVNames = [
@@ -58,7 +56,6 @@ const UnifiedControlPanel = ({
   const generateFriendlyName = (filename) => {
     const nameWithoutExt = filename.replace('.csv', '');
 
-    // Handle common patterns
     if (nameWithoutExt.includes('fantasypros')) {
       return nameWithoutExt.replace('fantasypros_', 'FantasyPros ').replace('_', ' ');
     }
@@ -75,7 +72,6 @@ const UnifiedControlPanel = ({
       return 'Sample Rankings';
     }
 
-    // Default: capitalize and replace underscores
     return nameWithoutExt
       .split('_')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -87,7 +83,6 @@ const UnifiedControlPanel = ({
     setIsScanning(true);
     const foundFiles = [];
 
-    // Check each common filename
     for (const filename of commonCSVNames) {
       try {
         const response = await fetch(`/${filename}`, { method: 'HEAD' });
@@ -112,7 +107,7 @@ const UnifiedControlPanel = ({
     if (showCSVOptions && availableCSVs.length === 0 && !isScanning) {
       scanForCSVFiles();
     }
-  }, [showCSVOptions]);
+  }, [showCSVOptions, availableCSVs.length, isScanning]);
 
   // Filter players for dropdown
   useEffect(() => {
@@ -124,7 +119,7 @@ const UnifiedControlPanel = ({
           const isUndrafted = !draftedPlayers.includes(player.id);
           return matchesSearch && isUndrafted;
         })
-        .slice(0, 6); // Limit to 6 results for control panel
+        .slice(0, 6);
       setFilteredDropdownPlayers(filtered);
       setIsDropdownOpen(filtered.length > 0);
       setSelectedIndex(-1);
@@ -188,14 +183,25 @@ const UnifiedControlPanel = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Handle restart draft with confirmation
-  const handleRestartDraft = () => {
+  // Handle manual save
+  const handleManualSave = () => {
+    if (onSaveDraft) {
+      onSaveDraft();
+      setLastSaveTime(Date.now());
+      setShowSaveOptions(false);
+    }
+  };
+
+  // Handle clear saved state
+  const handleClearSavedState = () => {
     const confirmed = window.confirm(
-      "Are you sure you want to restart the draft? This will clear all picks and reset the draft to the beginning. This action cannot be undone."
+      "Clear all saved draft data? This will remove the saved state from your browser but won't affect your current session."
     );
 
-    if (confirmed && onRestartDraft) {
-      onRestartDraft();
+    if (confirmed && onClearSavedState) {
+      onClearSavedState();
+      setLastSaveTime(null);
+      setShowSaveOptions(false);
     }
   };
 
@@ -210,8 +216,6 @@ const UnifiedControlPanel = ({
       }
 
       const csvText = await response.text();
-
-      // Create a fake File object from the CSV text
       const blob = new Blob([csvText], { type: 'text/csv' });
       const file = new File([blob], filename, { type: 'text/csv' });
 
@@ -262,12 +266,6 @@ const UnifiedControlPanel = ({
       alignItems: 'center',
       gap: '8px'
     },
-    label: {
-      fontSize: '12px',
-      fontWeight: '500',
-      color: themeStyles.text.secondary,
-      whiteSpace: 'nowrap'
-    },
     button: {
       display: 'flex',
       alignItems: 'center',
@@ -291,8 +289,12 @@ const UnifiedControlPanel = ({
       backgroundColor: '#dc2626',
       color: '#ffffff'
     },
-    buttonPrediction: {
-      backgroundColor: '#7c3aed',
+    buttonSuccess: {
+      backgroundColor: '#16a34a',
+      color: '#ffffff'
+    },
+    buttonWarning: {
+      backgroundColor: '#f59e0b',
       color: '#ffffff'
     },
     buttonDisabled: {
@@ -302,13 +304,13 @@ const UnifiedControlPanel = ({
     searchContainer: {
       position: 'relative',
       flex: '1',
-      maxWidth: '400px', // Reduced from 500px to give more space
-      minWidth: '250px'  // Reduced from 300px
+      maxWidth: '400px',
+      minWidth: '250px'
     },
     searchInputGroup: {
       display: 'flex',
       alignItems: 'center',
-      gap: '12px' // Increased gap between search input and hint
+      gap: '12px'
     },
     searchInputWrapper: {
       position: 'relative',
@@ -342,7 +344,7 @@ const UnifiedControlPanel = ({
       display: 'flex',
       alignItems: 'center',
       gap: '4px',
-      flexShrink: 0 // Prevent shrinking
+      flexShrink: 0
     },
     kbd: {
       backgroundColor: themeStyles.card.backgroundColor,
@@ -352,21 +354,12 @@ const UnifiedControlPanel = ({
       fontSize: '10px',
       fontWeight: 'bold'
     },
-    select: {
-      ...themeStyles.input,
-      padding: '8px 12px',
-      borderRadius: '6px',
-      fontSize: '13px',
-      outline: 'none',
-      minWidth: '100px'
-    },
     divider: {
       width: '1px',
       height: '20px',
       backgroundColor: themeStyles.border,
       margin: '0 8px'
     },
-    // Dropdown styles
     dropdown: {
       position: 'absolute',
       top: '100%',
@@ -408,22 +401,21 @@ const UnifiedControlPanel = ({
       color: themeStyles.text.muted,
       fontWeight: '500'
     },
-    // CSV Options Dropdown
-    csvOptionsDropdown: {
+    optionsDropdown: {
       position: 'absolute',
       top: '100%',
       right: '0',
       backgroundColor: themeStyles.card.backgroundColor,
       border: `1px solid ${themeStyles.border}`,
       borderRadius: '6px',
-      minWidth: '280px',
+      minWidth: '240px',
       maxHeight: '400px',
       overflowY: 'auto',
       zIndex: 1000,
       boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
       marginTop: '4px'
     },
-    csvOptionHeader: {
+    optionHeader: {
       padding: '12px 16px',
       borderBottom: `1px solid ${themeStyles.border}`,
       fontSize: '13px',
@@ -434,7 +426,7 @@ const UnifiedControlPanel = ({
       alignItems: 'center',
       justifyContent: 'space-between'
     },
-    csvOptionItem: {
+    optionItem: {
       padding: '12px 16px',
       cursor: 'pointer',
       borderBottom: `1px solid ${themeStyles.border}`,
@@ -443,19 +435,19 @@ const UnifiedControlPanel = ({
       alignItems: 'center',
       gap: '8px'
     },
-    csvOptionItemHover: {
+    optionItemHover: {
       backgroundColor: themeStyles.hover.background
     },
-    csvOptionText: {
+    optionText: {
       flex: '1'
     },
-    csvOptionName: {
+    optionName: {
       fontSize: '13px',
       fontWeight: '500',
       color: themeStyles.text.primary,
       marginBottom: '2px'
     },
-    csvOptionDesc: {
+    optionDesc: {
       fontSize: '11px',
       color: themeStyles.text.secondary
     },
@@ -508,6 +500,12 @@ const UnifiedControlPanel = ({
       transition: 'all 0.2s',
       backgroundColor: 'transparent',
       color: themeStyles.text.muted
+    },
+    saveStatus: {
+      fontSize: '11px',
+      color: themeStyles.text.muted,
+      padding: '8px 16px',
+      fontStyle: 'italic'
     }
   };
 
@@ -589,7 +587,7 @@ const UnifiedControlPanel = ({
 
         {/* Right: Action Controls */}
         <div style={styles.rightSection}>
-          {/* Action Controls */}
+          {/* Draft Controls */}
           <div style={styles.controlGroup}>
             <button
               onClick={undoLastDraft}
@@ -606,19 +604,105 @@ const UnifiedControlPanel = ({
             </button>
 
             <button
-              onClick={handleRestartDraft}
+              onClick={onRestartDraft}
               disabled={draftedPlayers.length === 0}
               style={{
                 ...styles.button,
-                ...styles.buttonDanger,
+                ...styles.buttonWarning,
                 ...(draftedPlayers.length === 0 ? styles.buttonDisabled : {})
               }}
-              title="Restart the entire draft from the beginning"
+              title="Restart the draft (keep settings and CSV)"
             >
               <RotateCcw size={14} />
               Restart
             </button>
 
+            <button
+              onClick={onNewDraft}
+              style={{
+                ...styles.button,
+                ...styles.buttonDanger
+              }}
+              title="Start completely new draft (clear everything)"
+            >
+              <Plus size={14} />
+              New Draft
+            </button>
+          </div>
+
+          <div style={styles.divider} />
+
+          {/* Save Controls */}
+          <div style={styles.controlGroup}>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowSaveOptions(!showSaveOptions)}
+                style={{
+                  ...styles.button,
+                  ...styles.buttonSuccess
+                }}
+                title="Save and restore options"
+              >
+                <Save size={14} />
+                Save
+              </button>
+
+              {/* Save Options Dropdown */}
+              {showSaveOptions && (
+                <div style={styles.optionsDropdown}>
+                  <div style={styles.optionHeader}>
+                    Draft Persistence
+                  </div>
+
+                  <div
+                    style={styles.optionItem}
+                    onClick={handleManualSave}
+                    onMouseEnter={(e) => {
+                      Object.assign(e.target.style, styles.optionItemHover);
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.backgroundColor = '';
+                    }}
+                  >
+                    <Save size={16} color={themeStyles.text.muted} />
+                    <div style={styles.optionText}>
+                      <div style={styles.optionName}>Save Now</div>
+                      <div style={styles.optionDesc}>Manual save current state</div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{...styles.optionItem, color: '#dc2626'}}
+                    onClick={handleClearSavedState}
+                    onMouseEnter={(e) => {
+                      Object.assign(e.target.style, styles.optionItemHover);
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.backgroundColor = '';
+                    }}
+                  >
+                    <Trash2 size={16} color="#dc2626" />
+                    <div style={styles.optionText}>
+                      <div style={{...styles.optionName, color: '#dc2626'}}>Clear Saved</div>
+                      <div style={styles.optionDesc}>Remove saved draft data</div>
+                    </div>
+                  </div>
+
+                  <div style={styles.saveStatus}>
+                    {lastSaveTime ?
+                      `Last saved: ${new Date(lastSaveTime).toLocaleTimeString()}` :
+                      'Auto-saves every change'
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={styles.divider} />
+
+          {/* File Controls */}
+          <div style={styles.controlGroup}>
             {/* CSV Switch Button */}
             <div style={{ position: 'relative' }}>
               <button
@@ -635,8 +719,8 @@ const UnifiedControlPanel = ({
 
               {/* CSV Options Dropdown */}
               {showCSVOptions && (
-                <div style={styles.csvOptionsDropdown}>
-                  <div style={styles.csvOptionHeader}>
+                <div style={styles.optionsDropdown}>
+                  <div style={styles.optionHeader}>
                     <span>Choose Rankings</span>
                     <button
                       onClick={(e) => {
@@ -680,19 +764,19 @@ const UnifiedControlPanel = ({
                       {availableCSVs.map((preset) => (
                         <div
                           key={preset.filename}
-                          style={styles.csvOptionItem}
+                          style={styles.optionItem}
                           onClick={() => handlePresetLoad(preset.filename)}
                           onMouseEnter={(e) => {
-                            Object.assign(e.target.style, styles.csvOptionItemHover);
+                            Object.assign(e.target.style, styles.optionItemHover);
                           }}
                           onMouseLeave={(e) => {
                             e.target.style.backgroundColor = '';
                           }}
                         >
                           <FileText size={16} color={themeStyles.text.muted} />
-                          <div style={styles.csvOptionText}>
-                            <div style={styles.csvOptionName}>{preset.name}</div>
-                            <div style={styles.csvOptionDesc}>{preset.description}</div>
+                          <div style={styles.optionText}>
+                            <div style={styles.optionName}>{preset.name}</div>
+                            <div style={styles.optionDesc}>{preset.description}</div>
                           </div>
                           {isLoadingPreset && (
                             <div style={{
@@ -715,7 +799,7 @@ const UnifiedControlPanel = ({
                           setShowCSVOptions(false);
                         }}
                         onMouseEnter={(e) => {
-                          Object.assign(e.target.style, styles.csvOptionItemHover);
+                          Object.assign(e.target.style, styles.optionItemHover);
                         }}
                         onMouseLeave={(e) => {
                           e.target.style.backgroundColor = '';

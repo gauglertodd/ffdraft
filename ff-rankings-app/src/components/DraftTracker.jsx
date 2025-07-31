@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import FileUpload from './FileUpload';
 import LeagueSettings from './LeagueSettings';
@@ -79,6 +79,200 @@ const DraftTrackerContent = () => {
 
   // Current CSV source tracking
   const [currentCSVSource, setCurrentCSVSource] = useState('');
+
+  // Draft persistence key
+  const DRAFT_STORAGE_KEY = 'fantasy-draft-state';
+
+  // Use useRef to prevent multiple restore dialogs (more reliable than useState)
+  const hasShownRestoreDialogRef = useRef(false);
+
+  // Save draft state to localStorage
+  const saveDraftState = (stateToSave = {}) => {
+    try {
+      const draftState = {
+        // Core draft data
+        draftedPlayers: stateToSave.draftedPlayers || draftedPlayers,
+        currentDraftPick: stateToSave.currentDraftPick || currentDraftPick,
+        watchedPlayers: stateToSave.watchedPlayers || watchedPlayers,
+
+        // Settings that should persist
+        numTeams: stateToSave.numTeams || numTeams,
+        rosterSettings: stateToSave.rosterSettings || rosterSettings,
+        positionColors: stateToSave.positionColors || positionColors,
+        autoDraftSettings: stateToSave.autoDraftSettings || autoDraftSettings,
+        teamVariability: stateToSave.teamVariability || teamVariability,
+        teamNames: stateToSave.teamNames || teamNames,
+        draftStyle: stateToSave.draftStyle || draftStyle,
+
+        // Player data and CSV info
+        players: stateToSave.players || players,
+        currentCSVSource: stateToSave.currentCSVSource || currentCSVSource,
+
+        // UI preferences
+        watchHighlightColor: stateToSave.watchHighlightColor || watchHighlightColor,
+        watchHighlightOpacity: stateToSave.watchHighlightOpacity || watchHighlightOpacity,
+        isDarkMode: stateToSave.isDarkMode !== undefined ? stateToSave.isDarkMode : isDarkMode,
+
+        // Timestamp for reference
+        lastSaved: Date.now(),
+        version: '1.0' // For future migration compatibility
+      };
+
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftState));
+      console.log('💾 Draft state saved to localStorage');
+    } catch (error) {
+      console.error('Failed to save draft state:', error);
+    }
+  };
+
+  // Load draft state from localStorage
+  const loadDraftState = () => {
+    try {
+      const savedState = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!savedState) {
+        console.log('No saved draft state found');
+        return null;
+      }
+
+      const draftState = JSON.parse(savedState);
+      console.log('📂 Loading saved draft state from:', new Date(draftState.lastSaved));
+
+      return draftState;
+    } catch (error) {
+      console.error('Failed to load draft state:', error);
+      return null;
+    }
+  };
+
+  // Clear saved draft state
+  const clearDraftState = () => {
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      console.log('🗑️ Draft state cleared from localStorage');
+    } catch (error) {
+      console.error('Failed to clear draft state:', error);
+    }
+  };
+
+  // Load saved state on component mount
+  useEffect(() => {
+    // Prevent multiple executions
+    if (hasShownRestoreDialogRef.current) {
+      console.log('🚫 Restore dialog already shown, skipping...');
+      return;
+    }
+
+    const savedState = loadDraftState();
+    if (savedState) {
+      console.log('📂 Restoring saved draft state...');
+
+      // Restore all state
+      if (savedState.draftedPlayers) setDraftedPlayers(savedState.draftedPlayers);
+      if (savedState.currentDraftPick) setCurrentDraftPick(savedState.currentDraftPick);
+      if (savedState.watchedPlayers) setWatchedPlayers(savedState.watchedPlayers);
+      if (savedState.numTeams) setNumTeams(savedState.numTeams);
+      if (savedState.rosterSettings) setRosterSettings(savedState.rosterSettings);
+      if (savedState.positionColors) setPositionColors(savedState.positionColors);
+      if (savedState.autoDraftSettings) setAutoDraftSettings(savedState.autoDraftSettings);
+      if (savedState.teamVariability) setTeamVariability(savedState.teamVariability);
+      if (savedState.teamNames) setTeamNames(savedState.teamNames);
+      if (savedState.draftStyle) setDraftStyle(savedState.draftStyle);
+      if (savedState.players) setPlayers(savedState.players);
+      if (savedState.currentCSVSource) setCurrentCSVSource(savedState.currentCSVSource);
+      if (savedState.watchHighlightColor) setWatchHighlightColor(savedState.watchHighlightColor);
+      if (savedState.watchHighlightOpacity !== undefined) setWatchHighlightOpacity(savedState.watchHighlightOpacity);
+
+      console.log(`✅ Draft state restored: ${savedState.draftedPlayers?.length || 0} picks, ${savedState.players?.length || 0} players`);
+
+      // Show restoration notification only once and only if there's meaningful progress
+      if (savedState.draftedPlayers?.length > 0) {
+        // Set flag immediately to prevent multiple dialogs
+        hasShownRestoreDialogRef.current = true;
+
+        setTimeout(() => {
+          const lastSaved = new Date(savedState.lastSaved).toLocaleString();
+          const confirmed = window.confirm(
+            `📂 Found saved draft with ${savedState.draftedPlayers.length} picks from ${lastSaved}.\n\nContinue with this draft?`
+          );
+          if (!confirmed) {
+            // User wants to start fresh
+            handleNewDraft();
+          }
+        }, 500);
+      }
+    } else {
+      console.log('No saved draft state found - starting fresh');
+    }
+  }, []); // Empty dependency array - only run on mount
+
+  // Also need to pass theme context to save dark mode preference
+  useEffect(() => {
+    // Auto-save with more frequent saves and better debugging
+    if (players.length > 0) {
+      console.log('🔄 Auto-save triggered by state change');
+
+      const saveTimer = setTimeout(() => {
+        console.log('💾 Auto-saving draft state...');
+        saveDraftState({ isDarkMode });
+      }, 500); // Reduced debounce time
+
+      return () => clearTimeout(saveTimer);
+    }
+  }, [
+    draftedPlayers,
+    currentDraftPick,
+    watchedPlayers,
+    numTeams,
+    rosterSettings,
+    autoDraftSettings,
+    teamVariability,
+    teamNames,
+    draftStyle,
+    players,
+    currentCSVSource,
+    isDarkMode
+  ]);
+
+  // Additional effect specifically for critical draft data
+  useEffect(() => {
+    // Save immediately when draft picks change
+    if (draftedPlayers.length > 0) {
+      console.log(`💾 Critical save: ${draftedPlayers.length} picks at pick ${currentDraftPick}`);
+      saveDraftState({
+        draftedPlayers,
+        currentDraftPick,
+        isDarkMode
+      });
+    }
+  }, [draftedPlayers.length, currentDraftPick]);
+
+  // Handle starting a completely new draft
+  const handleNewDraft = () => {
+    const confirmed = window.confirm(
+      "Start a completely new draft? This will clear all current progress and saved state."
+    );
+
+    if (confirmed) {
+      // Clear all state
+      setDraftedPlayers([]);
+      setCurrentDraftPick(1);
+      setWatchedPlayers([]);
+      setIsAutoDrafting(false);
+      setIsDraftRunning(false);
+      setIsAutoProcessing(false);
+      setLastAutoDraftTime(null);
+      setAvailabilityPredictions({});
+      setLastPredictionTime(null);
+
+      // Reset the dialog flag
+      hasShownRestoreDialogRef.current = false;
+
+      // Clear saved state
+      clearDraftState();
+
+      console.log('🆕 Started new draft - all progress cleared');
+    }
+  };
 
   // Check if PyScript is ready
   useEffect(() => {
@@ -251,10 +445,15 @@ const DraftTrackerContent = () => {
             setLastAutoDraftTime(null);
             setAvailabilityPredictions({});
             setLastPredictionTime(null);
+
+            // Clear saved state when uploading new CSV
+            clearDraftState();
+            console.log('🆕 New CSV uploaded - draft state reset');
           } else {
             // For switches, preserve draft state but reset predictions
             setAvailabilityPredictions({});
             setLastPredictionTime(null);
+            console.log('🔄 CSV switched - draft progress preserved');
           }
         } catch (error) {
           alert('Error parsing CSV: ' + error.message);
@@ -290,12 +489,21 @@ const DraftTrackerContent = () => {
     return watchedPlayers.includes(playerId);
   };
 
-  // Draft/Undo functions
+  // Draft/Undo functions with immediate persistence
   const draftPlayer = (playerId) => {
     if (!draftedPlayers.includes(playerId)) {
-      setDraftedPlayers([...draftedPlayers, playerId]);
-      setCurrentDraftPick(currentDraftPick + 1);
+      const newDraftedPlayers = [...draftedPlayers, playerId];
+      const newCurrentPick = currentDraftPick + 1;
+
+      setDraftedPlayers(newDraftedPlayers);
+      setCurrentDraftPick(newCurrentPick);
       setLastAutoDraftTime(Date.now());
+
+      // Immediate save after drafting
+      saveDraftState({
+        draftedPlayers: newDraftedPlayers,
+        currentDraftPick: newCurrentPick
+      });
 
       // Reset availability predictions when a pick is made
       console.log('🔄 Resetting availability predictions after draft pick');
@@ -306,8 +514,17 @@ const DraftTrackerContent = () => {
 
   const undoLastDraft = () => {
     if (draftedPlayers.length > 0) {
-      setDraftedPlayers(draftedPlayers.slice(0, -1));
-      setCurrentDraftPick(Math.max(1, currentDraftPick - 1));
+      const newDraftedPlayers = draftedPlayers.slice(0, -1);
+      const newCurrentPick = Math.max(1, currentDraftPick - 1);
+
+      setDraftedPlayers(newDraftedPlayers);
+      setCurrentDraftPick(newCurrentPick);
+
+      // Immediate save after undo
+      saveDraftState({
+        draftedPlayers: newDraftedPlayers,
+        currentDraftPick: newCurrentPick
+      });
 
       // Reset availability predictions when undoing a pick
       console.log('🔄 Resetting availability predictions after undo');
@@ -317,15 +534,23 @@ const DraftTrackerContent = () => {
   };
 
   const restartDraft = () => {
-    setDraftedPlayers([]);
-    setCurrentDraftPick(1);
-    setWatchedPlayers([]);
-    setIsAutoDrafting(false);
-    setIsDraftRunning(false);
-    setIsAutoProcessing(false);
-    setLastAutoDraftTime(null);
-    setAvailabilityPredictions({});
-    setLastPredictionTime(null);
+    const confirmed = window.confirm(
+      "Are you sure you want to restart the draft? This will clear all picks and reset the draft to the beginning, but keep your current settings and CSV data."
+    );
+
+    if (confirmed) {
+      setDraftedPlayers([]);
+      setCurrentDraftPick(1);
+      setWatchedPlayers([]);
+      setIsAutoDrafting(false);
+      setIsDraftRunning(false);
+      setIsAutoProcessing(false);
+      setLastAutoDraftTime(null);
+      setAvailabilityPredictions({});
+      setLastPredictionTime(null);
+
+      console.log('🔄 Draft restarted - picks cleared, settings preserved');
+    }
   };
 
   // Predict player availability for next pick using PyScript
@@ -1172,6 +1397,14 @@ const DraftTrackerContent = () => {
                     Loading PyScript...
                   </>
                 )}
+                {/* Debug: Show if localStorage has data */}
+                {localStorage.getItem('fantasy-draft-state') && (
+                  <>
+                    <span style={{ margin: '0 8px', color: 'rgba(255, 255, 255, 0.5)' }}>•</span>
+                    <span style={{ color: '#16a34a' }}>💾</span>
+                    Saved
+                  </>
+                )}
               </div>
 
               📍 Pick {currentDraftPick} - {teamNames[currentTeam] || `Team ${currentTeam}`} On The Clock
@@ -1216,6 +1449,9 @@ const DraftTrackerContent = () => {
             currentTeam={currentTeam}
             teamNames={teamNames}
             onRestartDraft={restartDraft}
+            onNewDraft={handleNewDraft}
+            onSaveDraft={() => saveDraftState()}
+            onClearSavedState={clearDraftState}
           />
 
           {/* Auto-Draft Settings */}
