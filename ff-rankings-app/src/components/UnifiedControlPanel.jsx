@@ -20,7 +20,9 @@ const UnifiedControlPanel = ({
   onSwitchCSV,
   onNewDraft,
   onSaveDraft,
-  onClearSavedState
+  onClearSavedState,
+  numTeams,
+  draftStyle
 }) => {
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -28,7 +30,7 @@ const UnifiedControlPanel = ({
   // Search dropdown state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [filteredDropdownPlayers, setFilteredDropdownPlayers] = useState([]);
+  const [filteredDropdownPlayers, setFilteredDropdownPlayers] = useState({ undrafted: [], drafted: [] });
 
   // CSV switching state
   const [showCSVOptions, setShowCSVOptions] = useState(false);
@@ -102,6 +104,51 @@ const UnifiedControlPanel = ({
     setIsScanning(false);
   };
 
+  // Memoized draft info calculation to avoid recalculating on every render
+  const getDraftInfoMemo = React.useMemo(() => {
+    const draftInfoCache = {};
+
+    return (playerId) => {
+      if (draftInfoCache[playerId]) {
+        return draftInfoCache[playerId];
+      }
+
+      const draftIndex = draftedPlayers.indexOf(playerId);
+      if (draftIndex === -1) return null;
+
+      const pickNumber = draftIndex + 1;
+      const round = Math.ceil(pickNumber / numTeams);
+
+      // Calculate team based on draft style and pick number
+      const teamId = (() => {
+        const roundIndex = Math.floor((pickNumber - 1) / numTeams);
+        const positionInRound = (pickNumber - 1) % numTeams;
+
+        if (draftStyle === 'snake') {
+          if (roundIndex % 2 === 0) {
+            return positionInRound + 1;
+          } else {
+            return numTeams - positionInRound;
+          }
+        } else {
+          return positionInRound + 1;
+        }
+      })();
+
+      const teamName = teamNames[teamId] || `Team ${teamId}`;
+
+      const result = {
+        pickNumber,
+        round,
+        teamId,
+        teamName
+      };
+
+      draftInfoCache[playerId] = result;
+      return result;
+    };
+  }, [draftedPlayers, numTeams, draftStyle, teamNames]);
+
   // Scan for files when CSV options are first opened
   useEffect(() => {
     if (showCSVOptions && availableCSVs.length === 0 && !isScanning) {
@@ -109,22 +156,42 @@ const UnifiedControlPanel = ({
     }
   }, [showCSVOptions, availableCSVs.length, isScanning]);
 
-  // Filter players for dropdown
+  // Filter players for dropdown - optimized for performance
   useEffect(() => {
     if (searchQuery.length > 0) {
-      const filtered = players
-        .filter(player => {
-          const matchesSearch = player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                              player.team.toLowerCase().includes(searchQuery.toLowerCase());
-          const isUndrafted = !draftedPlayers.includes(player.id);
-          return matchesSearch && isUndrafted;
-        })
-        .slice(0, 6);
-      setFilteredDropdownPlayers(filtered);
-      setIsDropdownOpen(filtered.length > 0);
-      setSelectedIndex(-1);
+      // Only search if query is at least 2 characters for better performance
+      if (searchQuery.length >= 2) {
+        const searchLower = searchQuery.toLowerCase();
+
+        // Single pass through players array
+        const undraftedPlayers = [];
+        const draftedMatchingPlayers = [];
+
+        for (let i = 0; i < players.length && (undraftedPlayers.length < 6 || draftedMatchingPlayers.length < 4); i++) {
+          const player = players[i];
+          const matchesSearch = player.name.toLowerCase().includes(searchLower) ||
+                              player.team.toLowerCase().includes(searchLower);
+
+          if (matchesSearch) {
+            if (!draftedPlayers.includes(player.id) && undraftedPlayers.length < 6) {
+              undraftedPlayers.push(player);
+            } else if (draftedPlayers.includes(player.id) && draftedMatchingPlayers.length < 4) {
+              draftedMatchingPlayers.push(player);
+            }
+          }
+        }
+
+        setFilteredDropdownPlayers({ undrafted: undraftedPlayers, drafted: draftedMatchingPlayers });
+        setIsDropdownOpen(undraftedPlayers.length > 0 || draftedMatchingPlayers.length > 0);
+        setSelectedIndex(-1);
+      } else {
+        // Don't search for single characters
+        setFilteredDropdownPlayers({ undrafted: [], drafted: [] });
+        setIsDropdownOpen(false);
+        setSelectedIndex(-1);
+      }
     } else {
-      setFilteredDropdownPlayers([]);
+      setFilteredDropdownPlayers({ undrafted: [], drafted: [] });
       setIsDropdownOpen(false);
       setSelectedIndex(-1);
     }
@@ -132,13 +199,16 @@ const UnifiedControlPanel = ({
 
   // Handle keyboard navigation
   const handleKeyDown = (e) => {
-    if (!isDropdownOpen || filteredDropdownPlayers.length === 0) return;
+    const totalUndrafted = filteredDropdownPlayers.undrafted?.length || 0;
+    const totalItems = totalUndrafted; // Only navigate through undrafted players
+
+    if (!isDropdownOpen || totalItems === 0) return;
 
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
         setSelectedIndex(prev =>
-          prev < filteredDropdownPlayers.length - 1 ? prev + 1 : prev
+          prev < totalItems - 1 ? prev + 1 : prev
         );
         break;
       case 'ArrowUp':
@@ -147,8 +217,8 @@ const UnifiedControlPanel = ({
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedIndex >= 0 && selectedIndex < filteredDropdownPlayers.length) {
-          const selectedPlayer = filteredDropdownPlayers[selectedIndex];
+        if (selectedIndex >= 0 && selectedIndex < totalUndrafted) {
+          const selectedPlayer = filteredDropdownPlayers.undrafted[selectedIndex];
           draftPlayer(selectedPlayer.id);
           setSearchQuery('');
           setIsDropdownOpen(false);
@@ -531,42 +601,123 @@ const UnifiedControlPanel = ({
                   {/* Search Dropdown */}
                   {isDropdownOpen && (
                     <div style={styles.dropdown}>
-                      {filteredDropdownPlayers.map((player, index) => {
-                        const isSelected = index === selectedIndex;
+                      {/* Undrafted Players Section */}
+                      {filteredDropdownPlayers.undrafted?.length > 0 && (
+                        <>
+                          {filteredDropdownPlayers.undrafted.map((player, index) => {
+                            const isSelected = index === selectedIndex;
 
-                        return (
-                          <div
-                            key={player.id}
-                            style={{
-                              ...styles.dropdownItem,
-                              ...(isSelected ? styles.dropdownItemSelected : {})
-                            }}
-                            onClick={() => handleDropdownClick(player)}
-                            onMouseEnter={() => setSelectedIndex(index)}
-                          >
-                            <div>
-                              <div style={{
-                                ...styles.playerDropdownName,
-                                color: isSelected ? '#ffffff' : themeStyles.text.primary
-                              }}>
-                                {player.name}
+                            return (
+                              <div
+                                key={player.id}
+                                style={{
+                                  ...styles.dropdownItem,
+                                  ...(isSelected ? styles.dropdownItemSelected : {})
+                                }}
+                                onClick={() => handleDropdownClick(player)}
+                                onMouseEnter={() => setSelectedIndex(index)}
+                              >
+                                <div>
+                                  <div style={{
+                                    ...styles.playerDropdownName,
+                                    color: isSelected ? '#ffffff' : themeStyles.text.primary
+                                  }}>
+                                    {player.name}
+                                  </div>
+                                  <div style={{
+                                    ...styles.playerDropdownMeta,
+                                    color: isSelected ? '#e0e7ff' : themeStyles.text.secondary
+                                  }}>
+                                    {player.position} • {player.team}
+                                  </div>
+                                </div>
+                                <div style={{
+                                  ...styles.playerDropdownRank,
+                                  color: isSelected ? '#e0e7ff' : themeStyles.text.muted
+                                }}>
+                                  #{player.rank}
+                                </div>
                               </div>
-                              <div style={{
-                                ...styles.playerDropdownMeta,
-                                color: isSelected ? '#e0e7ff' : themeStyles.text.secondary
-                              }}>
-                                {player.position} • {player.team}
-                              </div>
-                            </div>
+                            );
+                          })}
+                        </>
+                      )}
+
+                      {/* Drafted Players Section */}
+                      {filteredDropdownPlayers.drafted?.length > 0 && (
+                        <>
+                          {/* Section Divider */}
+                          {filteredDropdownPlayers.undrafted?.length > 0 && (
                             <div style={{
-                              ...styles.playerDropdownRank,
-                              color: isSelected ? '#e0e7ff' : themeStyles.text.muted
+                              padding: '8px 12px',
+                              backgroundColor: themeStyles.hover.background,
+                              borderTop: `1px solid ${themeStyles.border}`,
+                              borderBottom: `1px solid ${themeStyles.border}`,
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              color: themeStyles.text.secondary
                             }}>
-                              #{player.rank}
+                              Already Drafted
                             </div>
+                          )}
+
+                          {filteredDropdownPlayers.drafted.map((player) => {
+                            const draftInfo = getDraftInfoMemo(player.id);
+
+                            return (
+                              <div
+                                key={player.id}
+                                style={{
+                                  ...styles.dropdownItem,
+                                  opacity: 0.7,
+                                  cursor: 'default',
+                                  backgroundColor: themeStyles.hover.background
+                                }}
+                              >
+                                <div style={{ flex: 1 }}>
+                                  <div style={{
+                                    ...styles.playerDropdownName,
+                                    color: themeStyles.text.secondary,
+                                    textDecoration: 'line-through'
+                                  }}>
+                                    {player.name}
+                                  </div>
+                                  <div style={{
+                                    ...styles.playerDropdownMeta,
+                                    color: themeStyles.text.muted
+                                  }}>
+                                    {player.position} • {player.team}
+                                  </div>
+                                  {draftInfo && (
+                                    <div style={{
+                                      fontSize: '10px',
+                                      color: themeStyles.text.muted,
+                                      marginTop: '2px'
+                                    }}>
+                                      Pick {draftInfo.pickNumber} • Round {draftInfo.round} • {draftInfo.teamName}
+                                    </div>
+                                  )}
+                                </div>
+                                <div style={{
+                                  ...styles.playerDropdownRank,
+                                  color: themeStyles.text.muted
+                                }}>
+                                  #{player.rank}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
+
+                      {/* No Results */}
+                      {(!filteredDropdownPlayers.undrafted?.length && !filteredDropdownPlayers.drafted?.length) && searchQuery && (
+                        <div style={{ ...styles.dropdownItem, cursor: 'default' }}>
+                          <div style={{ color: themeStyles.text.muted, fontSize: '14px' }}>
+                            No players found
                           </div>
-                        );
-                      })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

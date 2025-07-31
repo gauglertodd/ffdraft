@@ -921,19 +921,80 @@ const DraftTrackerContent = () => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Enhanced quick draft players with selection tracking
-  const quickDraftPlayers = useMemo(() => {
-    if (!quickDraftQuery || quickDraftQuery.length < 1) return [];
+  // Helper function to get draft info for a player - memoized for performance
+  const getDraftInfoMemo = useMemo(() => {
+    const draftInfoCache = {};
 
-    const availablePlayers = players.filter(p => !draftedPlayers.includes(p.id));
-    return availablePlayers
-      .filter(player =>
-        player.name.toLowerCase().includes(quickDraftQuery.toLowerCase()) ||
-        player.team.toLowerCase().includes(quickDraftQuery.toLowerCase()) ||
-        player.position.toLowerCase().includes(quickDraftQuery.toLowerCase())
-      )
-      .slice(0, 8)
-      .sort((a, b) => a.rank - b.rank);
+    return (playerId) => {
+      if (draftInfoCache[playerId]) {
+        return draftInfoCache[playerId];
+      }
+
+      const draftIndex = draftedPlayers.indexOf(playerId);
+      if (draftIndex === -1) return null;
+
+      const pickNumber = draftIndex + 1;
+      const round = Math.ceil(pickNumber / numTeams);
+
+      // Calculate team based on draft style and pick number
+      const teamId = (() => {
+        const roundIndex = Math.floor((pickNumber - 1) / numTeams);
+        const positionInRound = (pickNumber - 1) % numTeams;
+
+        if (draftStyle === 'snake') {
+          if (roundIndex % 2 === 0) {
+            return positionInRound + 1;
+          } else {
+            return numTeams - positionInRound;
+          }
+        } else {
+          return positionInRound + 1;
+        }
+      })();
+
+      const teamName = teamNames[teamId] || `Team ${teamId}`;
+
+      const result = {
+        pickNumber,
+        round,
+        teamId,
+        teamName
+      };
+
+      draftInfoCache[playerId] = result;
+      return result;
+    };
+  }, [draftedPlayers, numTeams, draftStyle, teamNames]);
+
+  // Enhanced quick draft players with selection tracking - optimized for performance
+  const quickDraftPlayers = useMemo(() => {
+    if (!quickDraftQuery || quickDraftQuery.length < 2) return { undrafted: [], drafted: [] }; // Only search 2+ chars
+
+    const searchLower = quickDraftQuery.toLowerCase();
+    const undraftedPlayers = [];
+    const draftedMatchingPlayers = [];
+
+    // Single pass through players array with early termination
+    for (let i = 0; i < players.length && (undraftedPlayers.length < 8 || draftedMatchingPlayers.length < 6); i++) {
+      const player = players[i];
+      const matchesSearch = player.name.toLowerCase().includes(searchLower) ||
+                           player.team.toLowerCase().includes(searchLower) ||
+                           player.position.toLowerCase().includes(searchLower);
+
+      if (matchesSearch) {
+        if (!draftedPlayers.includes(player.id) && undraftedPlayers.length < 8) {
+          undraftedPlayers.push(player);
+        } else if (draftedPlayers.includes(player.id) && draftedMatchingPlayers.length < 6) {
+          draftedMatchingPlayers.push(player);
+        }
+      }
+    }
+
+    // Sort only the results, not all players
+    undraftedPlayers.sort((a, b) => a.rank - b.rank);
+    draftedMatchingPlayers.sort((a, b) => a.rank - b.rank);
+
+    return { undrafted: undraftedPlayers, drafted: draftedMatchingPlayers };
   }, [quickDraftQuery, players, draftedPlayers]);
 
   // Enhanced handleQuickDraft function
@@ -1104,8 +1165,9 @@ const DraftTrackerContent = () => {
         marginBottom: '16px'
       },
       playersList: {
-        maxHeight: '300px',
-        overflowY: 'auto'
+        height: '400px', // Fixed height to prevent jumping
+        overflowY: 'auto',
+        minHeight: '400px' // Ensure consistent height
       },
       playerItem: {
         display: 'flex',
@@ -1207,13 +1269,15 @@ const DraftTrackerContent = () => {
 
     // Enhanced keyboard navigation
     const handleKeyDown = (e) => {
-      if (quickDraftPlayers.length === 0) return;
+      const totalUndrafted = quickDraftPlayers.undrafted?.length || 0;
+
+      if (totalUndrafted === 0) return;
 
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
           setSelectedPlayerIndex(prev =>
-            prev < quickDraftPlayers.length - 1 ? prev + 1 : prev
+            prev < totalUndrafted - 1 ? prev + 1 : prev
           );
           break;
         case 'ArrowUp':
@@ -1222,8 +1286,8 @@ const DraftTrackerContent = () => {
           break;
         case 'Enter':
           e.preventDefault();
-          if (selectedPlayerIndex >= 0 && selectedPlayerIndex < quickDraftPlayers.length) {
-            const selectedPlayer = quickDraftPlayers[selectedPlayerIndex];
+          if (selectedPlayerIndex >= 0 && selectedPlayerIndex < totalUndrafted) {
+            const selectedPlayer = quickDraftPlayers.undrafted[selectedPlayerIndex];
             handleQuickDraft(selectedPlayer.id);
           }
           break;
@@ -1231,8 +1295,8 @@ const DraftTrackerContent = () => {
         case 'W':
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
-            if (selectedPlayerIndex >= 0 && selectedPlayerIndex < quickDraftPlayers.length) {
-              const selectedPlayer = quickDraftPlayers[selectedPlayerIndex];
+            if (selectedPlayerIndex >= 0 && selectedPlayerIndex < totalUndrafted) {
+              const selectedPlayer = quickDraftPlayers.undrafted[selectedPlayerIndex];
               toggleWatchPlayer(selectedPlayer.id);
             }
           }
@@ -1286,7 +1350,7 @@ const DraftTrackerContent = () => {
             autoFocus
           />
 
-          {quickDraftPlayers.length > 0 && (
+          {quickDraftPlayers.undrafted?.length > 0 && (
             <div style={modalStyles.helper}>
               <div style={modalStyles.helperSection}>
                 <span>↑↓</span> navigate
@@ -1304,7 +1368,8 @@ const DraftTrackerContent = () => {
           )}
 
           <div style={modalStyles.playersList}>
-            {quickDraftPlayers.map((player, index) => {
+            {/* Available Players Section */}
+            {quickDraftPlayers.undrafted?.map((player, index) => {
               const isSelected = index === selectedPlayerIndex;
               const isWatched = isPlayerWatched(player.id);
 
@@ -1364,9 +1429,114 @@ const DraftTrackerContent = () => {
               );
             })}
 
-            {quickDraftQuery && quickDraftPlayers.length === 0 && (
-              <div style={{ textAlign: 'center', color: themeStyles.text.muted, padding: '20px' }}>
-                No players found matching "{quickDraftQuery}"
+            {/* Drafted Players Section */}
+            {quickDraftPlayers.drafted?.length > 0 && (
+              <>
+                {/* Section Divider */}
+                {quickDraftPlayers.undrafted?.length > 0 && (
+                  <div style={{
+                    padding: '12px 16px',
+                    backgroundColor: themeStyles.hover.background,
+                    borderTop: `1px solid ${themeStyles.border}`,
+                    borderBottom: `1px solid ${themeStyles.border}`,
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: themeStyles.text.secondary,
+                    textAlign: 'center'
+                  }}>
+                    Already Drafted
+                  </div>
+                )}
+
+                {quickDraftPlayers.drafted.map((player) => {
+                  const draftInfo = getDraftInfoMemo(player.id);
+
+                  return (
+                    <div
+                      key={player.id}
+                      style={{
+                        ...modalStyles.playerItem,
+                        opacity: 0.7,
+                        cursor: 'default',
+                        backgroundColor: themeStyles.hover.background
+                      }}
+                    >
+                      <div style={modalStyles.playerInfo}>
+                        <div style={{
+                          ...modalStyles.rankBadge,
+                          backgroundColor: themeStyles.text.muted,
+                          color: themeStyles.card.backgroundColor
+                        }}>
+                          #{player.rank}
+                        </div>
+
+                        <div style={modalStyles.playerMain}>
+                          <div style={{
+                            ...modalStyles.playerName,
+                            color: themeStyles.text.secondary,
+                            textDecoration: 'line-through'
+                          }}>
+                            {player.name}
+                          </div>
+                          <div style={{
+                            ...modalStyles.playerMeta,
+                            color: themeStyles.text.muted
+                          }}>
+                            {player.position} • {player.team}
+                            {player.tier && ` • Tier ${player.tier}`}
+                          </div>
+                          {draftInfo && (
+                            <div style={{
+                              fontSize: '11px',
+                              color: themeStyles.text.muted,
+                              marginTop: '2px'
+                            }}>
+                              Pick {draftInfo.pickNumber} • Round {draftInfo.round} • {draftInfo.teamName}
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={modalStyles.playerActions}>
+                          <span style={{
+                            fontSize: '12px',
+                            color: themeStyles.text.muted,
+                            fontWeight: '500'
+                          }}>
+                            DRAFTED
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {quickDraftQuery.length >= 2 ? (
+              quickDraftPlayers.undrafted?.length === 0 && quickDraftPlayers.drafted?.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  color: themeStyles.text.muted,
+                  padding: '40px 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%'
+                }}>
+                  No players found matching "{quickDraftQuery}"
+                </div>
+              ) : null
+            ) : (
+              <div style={{
+                textAlign: 'center',
+                color: themeStyles.text.muted,
+                padding: '40px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%'
+              }}>
+                Type at least 2 characters to search...
               </div>
             )}
           </div>
@@ -1452,6 +1622,8 @@ const DraftTrackerContent = () => {
             onNewDraft={handleNewDraft}
             onSaveDraft={() => saveDraftState()}
             onClearSavedState={clearDraftState}
+            numTeams={numTeams}
+            draftStyle={draftStyle}
           />
 
           {/* Auto-Draft Settings */}

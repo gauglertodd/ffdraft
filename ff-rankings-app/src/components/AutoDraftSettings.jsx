@@ -20,6 +20,7 @@ const AutoDraftSettings = ({
   setTeamVariability
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [userClearedFields, setUserClearedFields] = useState({}); // Track which fields user intentionally cleared
 
   const strategies = {
     'manual': 'Manual Draft',
@@ -345,34 +346,38 @@ const AutoDraftSettings = ({
                     onChange={(e) => {
                       const newName = e.target.value;
                       setTeamNames({ ...teamNames, [teamId]: newName });
+
+                      // Track if user is intentionally clearing the field
+                      if (newName === '') {
+                        setUserClearedFields(prev => ({ ...prev, [teamId]: true }));
+                      } else {
+                        setUserClearedFields(prev => ({ ...prev, [teamId]: false }));
+                      }
                     }}
                     onBlur={(e) => {
-                      // Only reset to default if the field is completely empty after losing focus
-                      // and user isn't actively editing another field
-                      if (!e.target.value.trim()) {
-                        setTimeout(() => {
-                          // Check if user has moved focus to another input
-                          const activeElement = document.activeElement;
-                          const isEditingAnotherTeamName = activeElement &&
-                            activeElement.type === 'text' &&
-                            activeElement !== e.target;
-
-                          // Only reset if user isn't editing another team name
-                          if (!isEditingAnotherTeamName) {
-                            setTeamNames(prev => ({ ...prev, [teamId]: `Team ${teamId}` }));
-                          }
-                        }, 150);
+                      // Only reset if field is empty AND user didn't intentionally clear it
+                      if (!e.target.value.trim() && !userClearedFields[teamId]) {
+                        setTeamNames(prev => ({ ...prev, [teamId]: `Team ${teamId}` }));
                       }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
+                        // If field is empty when pressing Enter, reset to default
+                        if (!e.target.value.trim()) {
+                          setTeamNames(prev => ({ ...prev, [teamId]: `Team ${teamId}` }));
+                          setUserClearedFields(prev => ({ ...prev, [teamId]: false }));
+                        }
                         e.target.blur();
                       }
-                      // Allow users to clear the field completely without immediate reset
                       if (e.key === 'Escape') {
-                        e.target.value = `Team ${teamId}`;
+                        setTeamNames(prev => ({ ...prev, [teamId]: `Team ${teamId}` }));
+                        setUserClearedFields(prev => ({ ...prev, [teamId]: false }));
                         e.target.blur();
                       }
+                    }}
+                    onFocus={() => {
+                      // Reset the cleared flag when user focuses on the field
+                      setUserClearedFields(prev => ({ ...prev, [teamId]: false }));
                     }}
                     placeholder={`Team ${teamId}`}
                     style={styles.teamNameInput}
