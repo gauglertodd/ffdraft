@@ -9,10 +9,11 @@ import TeamBoards from './TeamBoards';
 import AutoDraftSettings from './AutoDraftSettings';
 import UnifiedControlPanel from './UnifiedControlPanel';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-
 const DraftTrackerContent = () => {
   const { isDarkMode, toggleTheme, themeStyles } = useTheme();
+
+  // PyScript status tracking
+  const [isPyScriptReady, setIsPyScriptReady] = useState(false);
 
   // Basic state
   const [players, setPlayers] = useState([]);
@@ -79,6 +80,39 @@ const DraftTrackerContent = () => {
   // Current CSV source tracking
   const [currentCSVSource, setCurrentCSVSource] = useState('');
 
+  // Check if PyScript is ready
+  useEffect(() => {
+    const checkPyScript = () => {
+      if (window.pyAutoDraft && window.pyPredictAvailability && window.pyGetStrategies) {
+        console.log('🐍 PyScript functions detected and ready!');
+        setIsPyScriptReady(true);
+        return true;
+      }
+      return false;
+    };
+
+    // Check immediately
+    if (checkPyScript()) return;
+
+    // Check periodically until ready
+    const interval = setInterval(() => {
+      if (checkPyScript()) {
+        clearInterval(interval);
+      }
+    }, 100);
+
+    // Cleanup interval after 30 seconds
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      console.warn('⚠️ PyScript not ready after 30 seconds');
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, []);
+
   const styles = {
     container: {
       ...themeStyles.container,
@@ -116,6 +150,16 @@ const DraftTrackerContent = () => {
       fontSize: '12px',
       color: 'rgba(255, 255, 255, 0.8)',
       fontWeight: '400'
+    },
+    pyScriptStatus: {
+      position: 'absolute',
+      left: '16px',
+      fontSize: '12px',
+      color: 'rgba(255, 255, 255, 0.8)',
+      fontWeight: '400',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px'
     }
   };
 
@@ -284,8 +328,16 @@ const DraftTrackerContent = () => {
     setLastPredictionTime(null);
   };
 
-  // Predict player availability for next pick
+  // Predict player availability for next pick using PyScript
   const predictPlayerAvailability = async (force = false) => {
+    if (!isPyScriptReady) {
+      console.log('PyScript not ready for predictions');
+      if (force) {
+        alert('❌ PyScript not ready yet!\n\nPlease wait for PyScript to load before using availability predictions.');
+      }
+      return;
+    }
+
     if (!players.length || teams.length === 0) {
       console.log('Cannot predict: no players or teams loaded');
       return;
@@ -298,51 +350,37 @@ const DraftTrackerContent = () => {
     }
 
     setIsPredicting(true);
-    console.log(`🔮 Starting availability prediction with ${predictionTrials} trials...`);
+    console.log(`🔮 Starting PyScript availability prediction with ${predictionTrials} trials...`);
 
     try {
       const availablePlayers = players.filter(p => !draftedPlayers.includes(p.id));
 
-      const response = await fetch(`${API_URL}/predict-availability`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          available_players: availablePlayers,
-          teams: teams,
-          current_pick: currentDraftPick,
-          my_team_id: currentTeam,
-          num_teams: numTeams,
-          draft_style: draftStyle,
-          trials: predictionTrials,
-          team_variability: teamVariability
-        })
-      });
+      // Call PyScript function
+      const resultJson = window.pyPredictAvailability(
+        JSON.stringify(availablePlayers),
+        JSON.stringify(teams),
+        currentDraftPick,
+        currentTeam,
+        numTeams,
+        draftStyle,
+        predictionTrials,
+        JSON.stringify(teamVariability)
+      );
 
-      if (!response.ok) {
-        throw new Error(`Prediction API request failed: ${response.status}`);
+      const result = JSON.parse(resultJson);
+
+      if (result.error) {
+        throw new Error(result.error);
       }
 
-      const result = await response.json();
       setAvailabilityPredictions(result.availability_predictions);
       setLastPredictionTime(Date.now());
-      console.log(`✅ Availability predictions completed for ${Object.keys(result.availability_predictions).length} players`);
+      console.log(`✅ PyScript availability predictions completed for ${Object.keys(result.availability_predictions).length} players`);
 
     } catch (error) {
-      console.error('Availability prediction error:', error);
-
-      if (error.message.includes('Failed to fetch')) {
-        console.warn('Backend API not available for predictions');
-        // Don't show alert for automatic predictions, just log
-        if (force) {
-          alert('❌ Backend API not available!\n\nTo use availability predictions:\n1. Make sure Python is installed\n2. Install dependencies: pip install flask flask-cors pandas pydantic\n3. Run: python auto_draft_api.py\n4. The server should start on ${API_URL}');
-        }
-      } else {
-        console.error('Failed to predict player availability:', error);
-        if (force) {
-          alert('Failed to predict player availability. Check the console for details.');
-        }
+      console.error('PyScript availability prediction error:', error);
+      if (force) {
+        alert('Failed to predict player availability using PyScript. Check the console for details.');
       }
     } finally {
       setIsPredicting(false);
@@ -426,12 +464,14 @@ const DraftTrackerContent = () => {
   // Auto-predict when draft state changes and it's a manual team's turn
   useEffect(() => {
     // Only auto-predict if:
-    // 1. Predictions are enabled
-    // 2. Not currently predicting
-    // 3. Have players and teams loaded
-    // 4. Not in the middle of an auto-draft sequence
-    // 5. Current team is set to manual draft
-    if (showAvailabilityPrediction &&
+    // 1. PyScript is ready
+    // 2. Predictions are enabled
+    // 3. Not currently predicting
+    // 4. Have players and teams loaded
+    // 5. Not in the middle of an auto-draft sequence
+    // 6. Current team is set to manual draft
+    if (isPyScriptReady &&
+        showAvailabilityPrediction &&
         !isPredicting &&
         players.length > 0 &&
         teams.length > 0 &&
@@ -442,7 +482,7 @@ const DraftTrackerContent = () => {
 
       // Only auto-predict if the current team is manual
       if (!currentTeamStrategy || currentTeamStrategy === 'manual') {
-        console.log(`🤖 Auto-triggering prediction for manual team ${currentTeam} at pick ${currentDraftPick}`);
+        console.log(`🤖 Auto-triggering PyScript prediction for manual team ${currentTeam} at pick ${currentDraftPick}`);
 
         // Small delay to ensure state has settled
         const timer = setTimeout(() => {
@@ -452,56 +492,37 @@ const DraftTrackerContent = () => {
         return () => clearTimeout(timer);
       }
     }
-  }, [currentDraftPick, currentTeam, showAvailabilityPrediction, isDraftRunning, autoDraftSettings, draftedPlayers.length, players.length, teams.length]);
+  }, [currentDraftPick, currentTeam, showAvailabilityPrediction, isDraftRunning, autoDraftSettings, draftedPlayers.length, players.length, teams.length, isPyScriptReady]);
 
-  // Auto-draft API integration
-const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variability = 0.0) => {
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-
-  // Debug logging
-  console.log('🔍 API_URL being used:', API_URL);
-  console.log('🔍 Full URL:', `${API_URL}/auto-draft`);
-  console.log('🔍 Request payload:', {
-    available_players: availablePlayers,
-    team_roster: teamRoster,
-    strategy: strategy,
-    variability: variability
-  });
-
-  try {
-    const response = await fetch(`${API_URL}/auto-draft`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        available_players: availablePlayers,
-        team_roster: teamRoster,
-        strategy: strategy,
-        variability: variability
-      })
-    });
-
-    console.log('🔍 Response status:', response.status);
-    console.log('🔍 Response headers:', response.headers);
-
-    // Get the raw response text first
-    const responseText = await response.text();
-    console.log('🔍 Raw response:', responseText);
-
-    // Try to parse as JSON
-    if (responseText) {
-      const result = JSON.parse(responseText);
-      return result;
-    } else {
-      throw new Error('Empty response from server');
+  // Auto-draft PyScript integration
+  const callAutoDraftPyScript = async (availablePlayers, teamRoster, strategy, variability = 0.0) => {
+    if (!isPyScriptReady) {
+      console.log('PyScript not ready for auto-draft');
+      return null;
     }
 
-  } catch (error) {
-    console.error('❌ Auto-draft API error:', error);
-    return null;
-  }
-};
+    try {
+      const resultJson = window.pyAutoDraft(
+        JSON.stringify(availablePlayers),
+        JSON.stringify(teamRoster),
+        strategy,
+        variability
+      );
+
+      const result = JSON.parse(resultJson);
+
+      if (result.error) {
+        console.error('PyScript auto-draft error:', result.error);
+        return null;
+      }
+
+      return result;
+
+    } catch (error) {
+      console.error('❌ PyScript auto-draft error:', error);
+      return null;
+    }
+  };
 
   // Local fallback strategy execution
   const executeLocalFallback = (availablePlayers, strategy) => {
@@ -529,7 +550,7 @@ const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variabil
     }
 
     setIsDraftRunning(true);
-    console.log(`🚀 Starting continuous draft sequence at ${draftSpeed} speed...`);
+    console.log(`🚀 Starting continuous draft sequence at ${draftSpeed} speed using PyScript...`);
 
     let currentPick = currentDraftPick;
     let draftedList = [...draftedPlayers];
@@ -559,19 +580,14 @@ const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variabil
         let selectedPlayerId = null;
 
         try {
-          const apiPromise = callAutoDraftAPI(availablePlayers, currentTeamData, teamStrategy, teamVariability[teamOnClock] || 0.3);
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('API timeout')), 2000)
-          );
-
-          const result = await Promise.race([apiPromise, timeoutPromise]);
+          const result = await callAutoDraftPyScript(availablePlayers, currentTeamData, teamStrategy, teamVariability[teamOnClock] || 0.3);
 
           if (result && result.player_id) {
             selectedPlayerId = result.player_id;
-            console.log(`✅ API: ${result.player_name} → Team ${teamOnClock} (${result.strategy_used})`);
+            console.log(`✅ PyScript: ${result.player_name} → Team ${teamOnClock} (${result.strategy_used})`);
           }
-        } catch (apiError) {
-          console.warn(`API failed for Team ${teamOnClock}:`, apiError.message);
+        } catch (pyScriptError) {
+          console.warn(`PyScript failed for Team ${teamOnClock}:`, pyScriptError.message);
         }
 
         if (!selectedPlayerId) {
@@ -631,20 +647,20 @@ const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variabil
       return;
     }
 
-    console.log(`Executing auto-draft for Team ${currentTeam} with ${availablePlayers.length} available players`);
+    console.log(`Executing PyScript auto-draft for Team ${currentTeam} with ${availablePlayers.length} available players`);
 
     try {
       setLastAutoDraftTime(Date.now());
 
       const teamVar = teamVariability[currentTeam] || 0.3;
-      const result = await callAutoDraftAPI(availablePlayers, currentTeamData, teamStrategy, teamVar);
+      const result = await callAutoDraftPyScript(availablePlayers, currentTeamData, teamStrategy, teamVar);
 
       if (result && result.player_id) {
-        console.log(`Auto-draft result: ${result.player_name} (${result.reasoning})`);
+        console.log(`PyScript auto-draft result: ${result.player_name} (${result.reasoning})`);
         draftPlayer(result.player_id);
         console.log(`✅ Auto-drafted: ${result.player_name} for ${currentTeamData.name} using ${result.strategy_used}`);
       } else {
-        console.log('Auto-draft API returned no player');
+        console.log('PyScript auto-draft returned no player');
       }
     } catch (error) {
       console.error('Auto-draft execution error:', error);
@@ -724,7 +740,7 @@ const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variabil
 
   // Modified auto-draft effect - only for single picks when not running sequence
   useEffect(() => {
-    if (!isAutoDrafting || players.length === 0 || draftedPlayers.length >= players.length || isDraftRunning) return;
+    if (!isPyScriptReady || !isAutoDrafting || players.length === 0 || draftedPlayers.length >= players.length || isDraftRunning) return;
 
     const currentTeam = getCurrentTeam(currentDraftPick);
     const teamStrategy = autoDraftSettings[currentTeam];
@@ -747,7 +763,7 @@ const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variabil
       console.log(`Team ${currentTeam} is set to manual draft - waiting for user input`);
       setIsAutoProcessing(false);
     }
-  }, [currentDraftPick, isAutoDrafting, autoDraftSettings, players.length, draftedPlayers.length, isDraftRunning, draftStyle, numTeams]);
+  }, [currentDraftPick, isAutoDrafting, autoDraftSettings, players.length, draftedPlayers.length, isDraftRunning, draftStyle, numTeams, isPyScriptReady]);
 
   // Get unique positions
   const positions = useMemo(() => {
@@ -1143,13 +1159,29 @@ const callAutoDraftAPI = async (availablePlayers, teamRoster, strategy, variabil
         <div style={styles.stickyHeader}>
           <div style={{ position: 'relative' }}>
             <div style={styles.headerContent}>
-              📍 Pick {currentDraftPick} - {teamNames[currentTeam] || `Team ${currentTeam}`} On The Clock
-            </div>
-            {currentCSVSource && (
-              <div style={styles.csvSourceIndicator}>
-                Using: {currentCSVSource}
+              {/* PyScript Status Indicator */}
+              <div style={styles.pyScriptStatus}>
+                {isPyScriptReady ? (
+                  <>
+                    <span style={{ color: '#16a34a' }}>🐍</span>
+                    PyScript Ready
+                  </>
+                ) : (
+                  <>
+                    <span style={{ color: '#f59e0b' }}>⏳</span>
+                    Loading PyScript...
+                  </>
+                )}
               </div>
-            )}
+
+              📍 Pick {currentDraftPick} - {teamNames[currentTeam] || `Team ${currentTeam}`} On The Clock
+
+              {currentCSVSource && (
+                <div style={styles.csvSourceIndicator}>
+                  Using: {currentCSVSource}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

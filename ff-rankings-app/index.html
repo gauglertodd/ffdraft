@@ -1,13 +1,32 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Fantasy Draft Tracker</title>
+    <title>Fantasy Football Draft Tracker</title>
+
+    <!-- PyScript CSS and JS -->
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- PyScript Configuration -->
+    <py-config>
+      packages = ["pandas", "numpy"]
+
+      [[fetch]]
+      files = ["/draft_strategies.py", "/auto_draft_logic.py"]
+    </py-config>
+
+    <!-- Hidden PyScript Terminal (optional for debugging) -->
+    <py-terminal auto-generate="true" style="display: none;"></py-terminal>
+
+    <!-- PyScript Python Code -->
+    <py-script src="/auto_draft_logic.py"></py-script>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
