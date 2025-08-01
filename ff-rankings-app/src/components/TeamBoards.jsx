@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Users, Grid, List } from 'lucide-react';
+import { Users, Grid, List, Crown } from 'lucide-react';
 import { PlayerAvatar, FootballIcon } from './TeamVisual';
 
-const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames, players, draftedPlayers, draftStyle, numTeams, currentDraftPick }) => {
+const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames, players, draftedPlayers, draftStyle, numTeams, currentDraftPick, keepers = [] }) => {
   const [viewMode, setViewMode] = useState('teams'); // 'teams' or 'grid'
 
   // Calculate which team drafted each pick
@@ -16,10 +16,13 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
     return position + 1;
   };
 
-  // Generate grid data for draft board
+  // Generate grid data for draft board - show all rounds with keeper support
   const gridData = useMemo(() => {
     const rounds = [];
-    const totalRounds = Math.ceil(players.length / numTeams);
+
+    // Calculate the maximum number of rounds based on roster size
+    const rosterSize = teams.length > 0 ? teams[0].roster.length : 15;
+    const totalRounds = rosterSize; // Show all possible rounds
 
     for (let round = 1; round <= totalRounds; round++) {
       const roundPicks = [];
@@ -45,16 +48,27 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
         const draftingTeamId = getCurrentTeam(pickNumber);
         const draftingTeamName = teamNames[draftingTeamId] || `Team ${draftingTeamId}`;
 
-        // Get the player drafted at this pick
+        // Check if this is a keeper pick
+        const keeper = keepers.find(k => k.pickNumber === pickNumber);
+
+        // Get the player drafted at this pick (either from draft or keeper)
         let draftedPlayer = null;
-        if (pickNumber <= draftedPlayers.length) {
+        let isKeeper = false;
+
+        if (keeper) {
+          // This is a keeper position
+          draftedPlayer = players.find(p => p.id === keeper.playerId);
+          isKeeper = true;
+        } else if (pickNumber <= draftedPlayers.length) {
+          // This is a regular drafted pick
           const playerId = draftedPlayers[pickNumber - 1];
           draftedPlayer = players.find(p => p.id === playerId);
+          isKeeper = false;
         }
 
-        // Determine if this is the current pick
-        const isCurrentPick = pickNumber === currentDraftPick;
-        const isPastPick = pickNumber < currentDraftPick;
+        // Determine pick status
+        const isCurrentPick = pickNumber === currentDraftPick && !keeper;
+        const isPastPick = keeper || pickNumber < currentDraftPick;
 
         roundPicks.push({
           pickNumber,
@@ -63,6 +77,7 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
           draftingTeamId,
           draftingTeamName,
           draftedPlayer,
+          isKeeper,
           isCurrentPick,
           isPastPick
         });
@@ -75,12 +90,13 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
     }
 
     return rounds;
-  }, [players, draftedPlayers, numTeams, draftStyle, currentDraftPick, teamNames]);
+  }, [players, draftedPlayers, keepers, numTeams, draftStyle, currentDraftPick, teamNames, teams]);
 
   const getTeamStats = (team) => {
     const filledSlots = team.roster.filter(slot => slot.player).length;
     const totalSlots = team.roster.length;
     const positionCounts = {};
+    const keeperCount = team.roster.filter(slot => slot.isKeeper).length;
 
     team.roster.forEach(slot => {
       if (slot.player) {
@@ -88,7 +104,7 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
       }
     });
 
-    return { filledSlots, totalSlots, positionCounts };
+    return { filledSlots, totalSlots, positionCounts, keeperCount };
   };
 
   const styles = {
@@ -189,7 +205,8 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
       justifyContent: 'space-between',
       alignItems: 'center',
       gap: '8px',
-      transition: 'all 0.2s'
+      transition: 'all 0.2s',
+      position: 'relative'
     },
     rosterSlotFilled: {
       color: '#ffffff',
@@ -199,6 +216,10 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
       backgroundColor: themeStyles.rosterSlot.empty.backgroundColor,
       color: themeStyles.rosterSlot.empty.color,
       border: themeStyles.rosterSlot.empty.border
+    },
+    rosterSlotKeeper: {
+      border: '2px solid #7c3aed',
+      boxShadow: '0 0 0 1px rgba(124, 58, 237, 0.2)'
     },
     slotPosition: {
       fontSize: '10px',
@@ -222,6 +243,13 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
       gap: '4px',
       fontSize: '11px'
     },
+    keeperIndicator: {
+      position: 'absolute',
+      top: '2px',
+      right: '2px',
+      fontSize: '10px',
+      color: '#7c3aed'
+    },
     teamStats: {
       marginTop: '12px',
       padding: '8px',
@@ -235,11 +263,20 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
       justifyContent: 'space-between',
       marginBottom: '2px'
     },
+    keeperStatRow: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      marginBottom: '2px',
+      color: '#7c3aed',
+      fontWeight: '600'
+    },
     // Grid view styles
     gridContainer: {
       overflowX: 'auto',
       overflowY: 'auto',
-      maxHeight: '70vh'
+      maxHeight: '80vh',
+      border: `1px solid ${themeStyles.border}`,
+      borderRadius: '8px'
     },
     gridTable: {
       width: '100%',
@@ -305,6 +342,10 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
       backgroundColor: themeStyles.hover.background,
       opacity: 0.7
     },
+    keeperPickCell: {
+      border: '2px solid #7c3aed',
+      backgroundColor: 'rgba(124, 58, 237, 0.1)'
+    },
     pickNumber: {
       fontSize: '10px',
       color: themeStyles.text.muted,
@@ -346,10 +387,17 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
       whiteSpace: 'nowrap',
       overflow: 'hidden',
       textOverflow: 'ellipsis'
+    },
+    gridKeeperIndicator: {
+      position: 'absolute',
+      top: '2px',
+      right: '4px',
+      fontSize: '10px',
+      color: '#7c3aed'
     }
   };
 
-  // Render teams view (existing functionality)
+  // Render teams view (updated to show keeper indicators)
   const renderTeamsView = () => (
     <div style={styles.teamsGrid}>
       {teams.map(team => {
@@ -371,6 +419,18 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
             }}>
               <span>{teamName}</span>
               {isCurrentTeam && <span>📍</span>}
+              {stats.keeperCount > 0 && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '12px',
+                  color: '#7c3aed'
+                }}>
+                  <Crown size={12} />
+                  {stats.keeperCount}
+                </div>
+              )}
             </div>
 
             <div style={styles.rosterGrid}>
@@ -382,9 +442,16 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
                     ...(slot.player ? {
                       ...styles.rosterSlotFilled,
                       backgroundColor: positionColors[slot.position] || '#6b7280'
-                    } : styles.rosterSlotEmpty)
+                    } : styles.rosterSlotEmpty),
+                    ...(slot.isKeeper ? styles.rosterSlotKeeper : {})
                   }}
                 >
+                  {slot.isKeeper && (
+                    <div style={styles.keeperIndicator}>
+                      <Crown size={10} />
+                    </div>
+                  )}
+
                   <span style={styles.slotPosition}>
                     {slot.position}
                   </span>
@@ -423,6 +490,12 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
                 <span>Roster:</span>
                 <span>{stats.filledSlots}/{stats.totalSlots}</span>
               </div>
+              {stats.keeperCount > 0 && (
+                <div style={styles.keeperStatRow}>
+                  <span>Keepers:</span>
+                  <span>{stats.keeperCount}</span>
+                </div>
+              )}
               {Object.entries(stats.positionCounts).map(([pos, count]) => (
                 <div key={pos} style={styles.statRow}>
                   <span>{pos}:</span>
@@ -436,7 +509,7 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
     </div>
   );
 
-  // Render grid view (draft board style)
+  // Render grid view (updated to show keeper indicators)
   const renderGridView = () => (
     <div style={styles.gridContainer}>
       <table style={styles.gridTable}>
@@ -492,6 +565,11 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
                   cellStyle = { ...cellStyle, ...styles.futurePickCell };
                 }
 
+                // Add keeper styling
+                if (pick.isKeeper) {
+                  cellStyle = { ...cellStyle, ...styles.keeperPickCell };
+                }
+
                 return (
                   <td key={pick.pickNumber} style={cellStyle}>
                     {/* Pick Number */}
@@ -501,6 +579,13 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
                     }>
                       #{pick.pickNumber}
                     </div>
+
+                    {/* Keeper Indicator */}
+                    {pick.isKeeper && (
+                      <div style={styles.gridKeeperIndicator}>
+                        <Crown size={10} />
+                      </div>
+                    )}
 
                     {/* Player Content */}
                     {pick.draftedPlayer ? (
@@ -535,6 +620,13 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
                   </td>
                 );
               })}
+
+              {/* Fill remaining cells if this round has fewer picks than teams */}
+              {Array.from({ length: numTeams - round.picks.length }, (_, i) => (
+                <td key={`empty-${i}`} style={{ ...styles.gridCell, ...styles.futurePickCell }}>
+                  <div style={styles.emptyPickText}>-</div>
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>

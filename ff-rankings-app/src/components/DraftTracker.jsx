@@ -1,4 +1,4 @@
-// Updated DraftTracker.jsx with Avoid Players feature
+// Updated DraftTracker.jsx with improved Keeper Mode functionality
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ThemeProvider, useTheme } from './ThemeContext';
@@ -7,6 +7,7 @@ import PlayerList from './PlayerList';
 import TeamBoards from './TeamBoards';
 import UnifiedControlPanel from './UnifiedControlPanel';
 import SettingsPanel from './SettingsPanel';
+import KeeperModePanel from './KeeperModePanel';
 
 const DraftTrackerContent = () => {
   const { isDarkMode, toggleTheme, themeStyles } = useTheme();
@@ -38,6 +39,10 @@ const DraftTrackerContent = () => {
     QB: '#dc2626', RB: '#16a34a', WR: '#2563eb', TE: '#ca8a04',
     FLEX: '#7c3aed', DST: '#374151', K: '#ea580c', BENCH: '#6b7280'
   });
+
+  // Keeper mode
+  const [isKeeperMode, setIsKeeperMode] = useState(false);
+  const [keepers, setKeepers] = useState([]);
 
   // Auto-draft settings
   const [autoDraftSettings, setAutoDraftSettings] = useState({});
@@ -90,21 +95,21 @@ const DraftTrackerContent = () => {
   const [saveMessage, setSaveMessage] = useState('');
   const [showSaveMessage, setShowSaveMessage] = useState(false);
 
-  // Save/load draft state (updated to include avoided players)
+  // Save/load draft state (updated to include avoided players and keepers)
   const saveDraftState = (showMessage = false) => {
     try {
       const draftState = {
         draftedPlayers, currentDraftPick, watchedPlayers, avoidedPlayers, numTeams, rosterSettings,
         positionColors, autoDraftSettings, teamVariability, teamNames, draftStyle,
         players, currentCSVSource, watchHighlightColor, watchHighlightOpacity,
-        avoidHighlightColor, avoidHighlightOpacity, isDarkMode, lastSaved: Date.now()
+        avoidHighlightColor, avoidHighlightOpacity, isDarkMode, isKeeperMode, keepers, lastSaved: Date.now()
       };
       localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftState));
 
       // Only show save confirmation message when explicitly requested
       if (showMessage) {
         const teamName = teamNames[currentTeam] || `Team ${currentTeam}`;
-        setSaveMessage(`Saved: Pick ${currentDraftPick} (${teamName} on clock) • ${draftedPlayers.length} picks completed • ${watchedPlayers.length} watched • ${avoidedPlayers.length} avoided`);
+        setSaveMessage(`Saved: Pick ${currentDraftPick} (${teamName} on clock) • ${draftedPlayers.length} picks completed • ${watchedPlayers.length} watched • ${avoidedPlayers.length} avoided • ${keepers.length} keepers`);
         setShowSaveMessage(true);
 
         // Hide message after 3 seconds
@@ -143,7 +148,7 @@ const DraftTrackerContent = () => {
     }
   };
 
-  // Load saved state on mount (updated to include avoided players)
+  // Load saved state on mount (updated to include avoided players and keepers)
   useEffect(() => {
     if (hasShownRestoreDialogRef.current) return;
 
@@ -153,20 +158,10 @@ const DraftTrackerContent = () => {
       if (savedState.draftedPlayers !== undefined) setDraftedPlayers(savedState.draftedPlayers);
       if (savedState.currentDraftPick !== undefined) setCurrentDraftPick(savedState.currentDraftPick);
       if (savedState.watchedPlayers !== undefined) setWatchedPlayers(savedState.watchedPlayers);
-      if (savedState.avoidedPlayers !== undefined) setAvoidedPlayers(savedState.avoidedPlayers);
-      if (savedState.numTeams !== undefined) setNumTeams(savedState.numTeams);
-      if (savedState.rosterSettings !== undefined) setRosterSettings(savedState.rosterSettings);
-      if (savedState.positionColors !== undefined) setPositionColors(savedState.positionColors);
-      if (savedState.autoDraftSettings !== undefined) setAutoDraftSettings(savedState.autoDraftSettings);
-      if (savedState.teamVariability !== undefined) setTeamVariability(savedState.teamVariability);
-      if (savedState.teamNames !== undefined) setTeamNames(savedState.teamNames);
-      if (savedState.draftStyle !== undefined) setDraftStyle(savedState.draftStyle);
-      if (savedState.players !== undefined) setPlayers(savedState.players);
-      if (savedState.currentCSVSource !== undefined) setCurrentCSVSource(savedState.currentCSVSource);
-      if (savedState.watchHighlightColor !== undefined) setWatchHighlightColor(savedState.watchHighlightColor);
-      if (savedState.watchHighlightOpacity !== undefined) setWatchHighlightOpacity(savedState.watchHighlightOpacity);
       if (savedState.avoidHighlightColor !== undefined) setAvoidHighlightColor(savedState.avoidHighlightColor);
       if (savedState.avoidHighlightOpacity !== undefined) setAvoidHighlightOpacity(savedState.avoidHighlightOpacity);
+      if (savedState.isKeeperMode !== undefined) setIsKeeperMode(savedState.isKeeperMode);
+      if (savedState.keepers !== undefined) setKeepers(savedState.keepers);
 
       hasShownRestoreDialogRef.current = true;
 
@@ -179,14 +174,14 @@ const DraftTrackerContent = () => {
     }
   }, []);
 
-  // Auto-save on changes (updated to include avoided players)
+  // Auto-save on changes (updated to include avoided players and keepers)
   useEffect(() => {
     if (players.length > 0) {
       const timer = setTimeout(saveDraftState, 500);
       return () => clearTimeout(timer);
     }
   }, [draftedPlayers, currentDraftPick, watchedPlayers, avoidedPlayers, numTeams, rosterSettings,
-      autoDraftSettings, teamVariability, teamNames, draftStyle, players]);
+      autoDraftSettings, teamVariability, teamNames, draftStyle, players, isKeeperMode, keepers]);
 
   // CSV parsing
   const parseCSV = (csvText) => {
@@ -233,6 +228,8 @@ const DraftTrackerContent = () => {
             setWatchedPlayers([]);
             setAvoidedPlayers([]);
             setAvailabilityPredictions({});
+            setIsKeeperMode(false);
+            setKeepers([]);
             clearDraftState();
           }
         } catch (error) {
@@ -262,39 +259,97 @@ const DraftTrackerContent = () => {
 
   const currentTeam = getCurrentTeam(currentDraftPick);
 
-  // Draft actions
+  // NEW: Check if current pick should be a keeper
+  const isCurrentPickKeeper = () => {
+    if (!isKeeperMode) return null;
+    return keepers.find(k => k.pickNumber === currentDraftPick);
+  };
+
+  // NEW: Apply keepers to teams immediately when they're set (not at draft start)
+  // This function is no longer needed since we don't pre-draft keepers
+  // We'll handle them dynamically in the team generation and draft process
+
+  // Modified draft player function to handle keepers properly
   const draftPlayer = (playerId) => {
-    if (!draftedPlayers.includes(playerId)) {
-      setDraftedPlayers(prev => [...prev, playerId]);
-      setCurrentDraftPick(prev => prev + 1);
-      setAvailabilityPredictions({});
+    // Check if we're trying to draft at a keeper position
+    const keeperAtCurrentPick = isCurrentPickKeeper();
+
+    if (keeperAtCurrentPick && playerId !== keeperAtCurrentPick.playerId) {
+      alert(`This pick is reserved for keeper: ${keeperAtCurrentPick.playerName}`);
+      return;
     }
+
+    // Check if this player is already drafted (including as a keeper)
+    const isAlreadyDrafted = draftedPlayers.includes(playerId) ||
+                            keepers.some(k => k.playerId === playerId && k.pickNumber <= currentDraftPick);
+
+    if (isAlreadyDrafted) {
+      alert('This player has already been drafted or is a keeper.');
+      return;
+    }
+
+    // Add to drafted players
+    setDraftedPlayers(prev => [...prev, playerId]);
+
+    // Find next available pick (skip keeper positions)
+    let nextPick = currentDraftPick + 1;
+    while (keepers.some(k => k.pickNumber === nextPick)) {
+      nextPick++;
+    }
+    setCurrentDraftPick(nextPick);
+
+    setAvailabilityPredictions({});
   };
 
   const undoLastDraft = () => {
-    if (draftedPlayers.length > 0) {
-      setDraftedPlayers(prev => prev.slice(0, -1));
-      setCurrentDraftPick(prev => Math.max(1, prev - 1));
-      setAvailabilityPredictions({});
+    if (draftedPlayers.length === 0) return;
+
+    const lastDraftedPlayerId = draftedPlayers[draftedPlayers.length - 1];
+
+    // Check if the last drafted player was a keeper (shouldn't happen but good safeguard)
+    const wasKeeper = keepers.some(k => k.playerId === lastDraftedPlayerId);
+
+    if (wasKeeper) {
+      alert("Cannot undo a keeper pick. Please modify keepers in the Keeper Mode panel instead.");
+      return;
     }
+
+    setDraftedPlayers(prev => prev.slice(0, -1));
+
+    // Find the previous non-keeper pick
+    let prevPick = currentDraftPick - 1;
+    while (prevPick > 0 && keepers.some(k => k.pickNumber === prevPick)) {
+      prevPick--;
+    }
+    setCurrentDraftPick(Math.max(1, prevPick));
+
+    setAvailabilityPredictions({});
   };
 
   const restartDraft = () => {
-    if (window.confirm("Restart draft? This clears all picks but keeps settings.")) {
+    if (window.confirm("Restart draft? This clears all picks but keeps settings and keepers.")) {
       setDraftedPlayers([]);
-      setCurrentDraftPick(1);
+
+      // Find the first non-keeper pick
+      let firstPick = 1;
+      while (keepers.some(k => k.pickNumber === firstPick)) {
+        firstPick++;
+      }
+      setCurrentDraftPick(firstPick);
+
       setWatchedPlayers([]);
       setAvoidedPlayers([]);
       setIsAutoDrafting(false);
       setIsDraftRunning(false);
       setAvailabilityPredictions({});
+
       // Save the cleared state
       saveDraftState();
     }
   };
 
   const handleNewDraft = () => {
-    if (window.confirm("Start completely new draft? This clears everything.")) {
+    if (window.confirm("Start completely new draft? This clears everything including keepers.")) {
       setDraftedPlayers([]);
       setCurrentDraftPick(1);
       setWatchedPlayers([]);
@@ -302,6 +357,8 @@ const DraftTrackerContent = () => {
       setIsAutoDrafting(false);
       setIsDraftRunning(false);
       setAvailabilityPredictions({});
+      setIsKeeperMode(false);
+      setKeepers([]);
       hasShownRestoreDialogRef.current = false;
       clearDraftState();
     }
@@ -335,7 +392,7 @@ const DraftTrackerContent = () => {
 
   const isPlayerAvoided = (playerId) => avoidedPlayers.includes(playerId);
 
-  // Auto-draft system (updated to avoid avoided players)
+  // Auto-draft system (updated to handle keepers and avoid avoided players)
   const getDraftDelay = () => {
     const delays = { instant: 50, fast: 200, normal: 800, slow: 2000 };
     return delays[draftSpeed] || 500;
@@ -370,9 +427,15 @@ const DraftTrackerContent = () => {
       const nonAvoidedPlayers = availablePlayers.filter(p => !avoidedPlayers.includes(p.id));
       const playersToConsider = nonAvoidedPlayers.length > 0 ? nonAvoidedPlayers : availablePlayers;
 
+      // Ensure team roster includes roster requirements for proper DST/K handling
+      const enhancedTeamRoster = {
+        ...teamRoster,
+        roster_requirements: rosterSettings
+      };
+
       const resultJson = window.pyAutoDraft(
         JSON.stringify(playersToConsider),
-        JSON.stringify(teamRoster),
+        JSON.stringify(enhancedTeamRoster),
         strategy,
         variability
       );
@@ -384,60 +447,68 @@ const DraftTrackerContent = () => {
     }
   };
 
-  const startDraftSequence = async () => {
-    if (!isAutoDrafting || !players.length) return;
+  // Updated auto-draft execution to skip keeper picks
+  useEffect(() => {
+    if (!isPyScriptReady || !isAutoDrafting || !players.length || isDraftRunning) return;
 
-    setIsDraftRunning(true);
-    let currentPick = currentDraftPick;
-    let draftedList = [...draftedPlayers];
-    const delay = getDraftDelay();
+    // Calculate total roster spots
+    const totalRosterSpots = numTeams * Object.values(rosterSettings).reduce((sum, count) => sum + count, 0);
 
-    while (currentPick <= players.length && draftedList.length < players.length) {
-      const teamOnClock = getCurrentTeam(currentPick);
-      const teamStrategy = autoDraftSettings[teamOnClock];
-
-      if (!teamStrategy || teamStrategy === 'manual') break;
-
-      const availablePlayers = players.filter(p => !draftedList.includes(p.id));
-      const currentTeamData = teams.find(t => t.id === teamOnClock);
-
-      if (!availablePlayers.length) break;
-
-      let selectedPlayerId = null;
-
-      // Try PyScript first
-      if (isPyScriptReady) {
-        const result = await callAutoDraftPyScript(
-          availablePlayers,
-          currentTeamData,
-          teamStrategy,
-          teamVariability[teamOnClock] || 0.3
-        );
-        if (result?.player_id) selectedPlayerId = result.player_id;
-      }
-
-      // Fallback to local logic
-      if (!selectedPlayerId) {
-        selectedPlayerId = executeLocalFallback(availablePlayers, teamStrategy);
-      }
-
-      if (selectedPlayerId) {
-        draftedList.push(selectedPlayerId);
-        currentPick++;
-
-        setDraftedPlayers([...draftedList]);
-        setCurrentDraftPick(currentPick);
-
-        if (draftSpeed !== 'instant') {
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      } else {
-        break;
-      }
+    // Stop if draft is complete
+    if (draftedPlayers.length >= totalRosterSpots || draftedPlayers.length >= players.length) {
+      setIsAutoDrafting(false);
+      setIsDraftRunning(false);
+      return;
     }
 
-    setIsDraftRunning(false);
-  };
+    // Check if current pick is a keeper - if so, skip it (keepers are shown but not auto-drafted)
+    const keeperPick = isCurrentPickKeeper();
+    if (keeperPick) {
+      // Skip to next non-keeper pick
+      let nextPick = currentDraftPick + 1;
+      while (keepers.some(k => k.pickNumber === nextPick)) {
+        nextPick++;
+      }
+      setCurrentDraftPick(nextPick);
+      return;
+    }
+
+    const teamStrategy = autoDraftSettings[currentTeam];
+    if (!teamStrategy || teamStrategy === 'manual') return;
+
+    const executeAutoDraft = async () => {
+      // Filter out players that are already drafted or are keepers
+      const keeperPlayerIds = keepers.map(k => k.playerId);
+      const availablePlayers = players.filter(p =>
+        !draftedPlayers.includes(p.id) && !keeperPlayerIds.includes(p.id)
+      );
+      const currentTeamData = teams.find(t => t.id === currentTeam);
+
+      if (!availablePlayers.length || !currentTeamData) return;
+
+      try {
+        // Get the actual variability value, ensuring 0 is treated as valid
+        const teamVar = teamVariability[currentTeam];
+        const actualVariability = teamVar !== undefined ? teamVar : 0.3;
+
+        const result = await callAutoDraftPyScript(availablePlayers, currentTeamData, teamStrategy, actualVariability);
+
+        if (result?.player_id) {
+          draftPlayer(result.player_id);
+        } else {
+          // Fallback
+          const fallbackPlayer = executeLocalFallback(availablePlayers, teamStrategy);
+          if (fallbackPlayer) draftPlayer(fallbackPlayer);
+        }
+      } catch (error) {
+        console.error('Auto-draft error:', error);
+      }
+    };
+
+    const timer = setTimeout(executeAutoDraft, getDraftDelay());
+    return () => clearTimeout(timer);
+  }, [currentDraftPick, isAutoDrafting, autoDraftSettings, players.length,
+      draftedPlayers.length, isDraftRunning, draftStyle, numTeams, isPyScriptReady, teamVariability, keepers]);
 
   // Availability prediction
   const predictPlayerAvailability = async (force = false) => {
@@ -498,14 +569,14 @@ const DraftTrackerContent = () => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Generate teams with roster slots
+  // Generate teams with roster slots - UPDATED to show keeper assignments
   const teams = useMemo(() => {
     const teamArray = [];
     for (let i = 1; i <= numTeams; i++) {
       const roster = [];
       Object.entries(rosterSettings).forEach(([position, count]) => {
         for (let j = 0; j < count; j++) {
-          roster.push({ position, player: null, slotIndex: roster.length });
+          roster.push({ position, player: null, slotIndex: roster.length, isKeeper: false });
         }
       });
 
@@ -516,33 +587,68 @@ const DraftTrackerContent = () => {
       });
     }
 
-    // Assign drafted players to teams
-    draftedPlayers.forEach((playerId, draftIndex) => {
-      const player = players.find(p => p.id === playerId);
-      if (!player) return;
+    // Create a comprehensive list of all picks (drafted + keeper positions)
+    const allPicks = [];
 
+    // Add all drafted players
+    draftedPlayers.forEach((playerId, draftIndex) => {
       const pickNumber = draftIndex + 1;
       const teamId = getCurrentTeam(pickNumber);
-      const team = teamArray.find(t => t.id === teamId);
-      if (!team) return;
+      const player = players.find(p => p.id === playerId);
+      if (player) {
+        allPicks.push({
+          pickNumber,
+          teamId,
+          player,
+          isKeeper: keepers.some(k => k.playerId === playerId && k.pickNumber === pickNumber)
+        });
+      }
+    });
+
+    // Add keeper positions that haven't been drafted yet
+    keepers.forEach(keeper => {
+      // Only add if this keeper position hasn't been filled by the draft yet
+      const alreadyDrafted = allPicks.some(pick => pick.pickNumber === keeper.pickNumber);
+      if (!alreadyDrafted) {
+        const player = players.find(p => p.id === keeper.playerId);
+        if (player) {
+          allPicks.push({
+            pickNumber: keeper.pickNumber,
+            teamId: keeper.teamId,
+            player,
+            isKeeper: true
+          });
+        }
+      }
+    });
+
+    // Sort all picks by pick number to process them in draft order
+    allPicks.sort((a, b) => a.pickNumber - b.pickNumber);
+
+    // Assign players to team rosters
+    allPicks.forEach(pick => {
+      const team = teamArray.find(t => t.id === pick.teamId);
+      if (!team || !pick.player) return;
 
       // Fill roster slots (exact position -> FLEX -> BENCH)
       let slotFound = false;
 
       // Try exact position match
       for (let slot of team.roster) {
-        if (slot.position === player.position && !slot.player) {
-          slot.player = player;
+        if (slot.position === pick.player.position && !slot.player) {
+          slot.player = pick.player;
+          slot.isKeeper = pick.isKeeper;
           slotFound = true;
           break;
         }
       }
 
       // Try FLEX for RB/WR/TE
-      if (!slotFound && ['RB', 'WR', 'TE'].includes(player.position)) {
+      if (!slotFound && ['RB', 'WR', 'TE'].includes(pick.player.position)) {
         for (let slot of team.roster) {
           if (slot.position === 'FLEX' && !slot.player) {
-            slot.player = player;
+            slot.player = pick.player;
+            slot.isKeeper = pick.isKeeper;
             slotFound = true;
             break;
           }
@@ -553,7 +659,8 @@ const DraftTrackerContent = () => {
       if (!slotFound) {
         for (let slot of team.roster) {
           if (slot.position === 'BENCH' && !slot.player) {
-            slot.player = player;
+            slot.player = pick.player;
+            slot.isKeeper = pick.isKeeper;
             break;
           }
         }
@@ -561,7 +668,7 @@ const DraftTrackerContent = () => {
     });
 
     return teamArray;
-  }, [numTeams, rosterSettings, draftedPlayers, players, draftStyle, teamNames]);
+  }, [numTeams, rosterSettings, draftedPlayers, players, draftStyle, teamNames, keepers]);
 
   // Update auto-draft settings when teams change
   useEffect(() => {
@@ -576,46 +683,12 @@ const DraftTrackerContent = () => {
     setTeamVariability(prev => {
       const newVariability = {};
       for (let i = 1; i <= numTeams; i++) {
-        newVariability[i] = prev[i] || 0.3;
+        // Explicitly check if the value exists, don't use || operator which treats 0 as falsy
+        newVariability[i] = prev[i] !== undefined ? prev[i] : 0.3;
       }
       return newVariability;
     });
   }, [numTeams]);
-
-  // Single auto-draft execution (not sequence)
-  useEffect(() => {
-    if (!isPyScriptReady || !isAutoDrafting || !players.length ||
-        draftedPlayers.length >= players.length || isDraftRunning) return;
-
-    const teamStrategy = autoDraftSettings[currentTeam];
-    if (!teamStrategy || teamStrategy === 'manual') return;
-
-    const executeAutoDraft = async () => {
-      const availablePlayers = players.filter(p => !draftedPlayers.includes(p.id));
-      const currentTeamData = teams.find(t => t.id === currentTeam);
-
-      if (!availablePlayers.length || !currentTeamData) return;
-
-      try {
-        const teamVar = teamVariability[currentTeam] || 0.3;
-        const result = await callAutoDraftPyScript(availablePlayers, currentTeamData, teamStrategy, teamVar);
-
-        if (result?.player_id) {
-          draftPlayer(result.player_id);
-        } else {
-          // Fallback
-          const fallbackPlayer = executeLocalFallback(availablePlayers, teamStrategy);
-          if (fallbackPlayer) draftPlayer(fallbackPlayer);
-        }
-      } catch (error) {
-        console.error('Auto-draft error:', error);
-      }
-    };
-
-    const timer = setTimeout(executeAutoDraft, getDraftDelay());
-    return () => clearTimeout(timer);
-  }, [currentDraftPick, isAutoDrafting, autoDraftSettings, players.length,
-      draftedPlayers.length, isDraftRunning, draftStyle, numTeams, isPyScriptReady]);
 
   // Computed values
   const positions = useMemo(() => {
@@ -646,10 +719,15 @@ const DraftTrackerContent = () => {
         player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         player.team.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesPosition = selectedPosition === 'ALL' || player.position === selectedPosition;
-      const matchesDrafted = showDrafted || !draftedPlayers.includes(player.id);
+
+      // Player is considered "drafted" if they're in draftedPlayers OR they're a keeper
+      const isPlayerDrafted = draftedPlayers.includes(player.id) ||
+                             keepers.some(k => k.playerId === player.id);
+      const matchesDrafted = showDrafted || !isPlayerDrafted;
+
       return matchesSearch && matchesPosition && matchesDrafted;
     });
-  }, [players, playersByPosition, activeTab, searchQuery, selectedPosition, showDrafted, draftedPlayers]);
+  }, [players, playersByPosition, activeTab, searchQuery, selectedPosition, showDrafted, draftedPlayers, keepers]);
 
   const draftStats = useMemo(() => {
     const stats = {};
@@ -729,7 +807,7 @@ const DraftTrackerContent = () => {
     return '#a16207';
   };
 
-  // Quick Draft Modal Component (updated with watch/avoid functionality)
+  // Quick Draft Modal Component (same as before)
   const QuickDraftModal = () => {
     if (!showQuickDraft) return null;
 
@@ -755,7 +833,6 @@ const DraftTrackerContent = () => {
         case 'Escape':
           setShowQuickDraft(false);
           break;
-        // New hotkeys for watch/avoid
         case 'w':
           e.preventDefault();
           if (selectedPlayerIndex >= 0 && selectedPlayerIndex < totalUndrafted) {
@@ -817,6 +894,11 @@ const DraftTrackerContent = () => {
           }}>
             <div style={{ marginBottom: '4px' }}>
               <strong>Current Pick:</strong> {currentDraftPick} - {teamNames[currentTeam] || `Team ${currentTeam}`}
+              {isCurrentPickKeeper() && (
+                <span style={{ marginLeft: '8px', color: '#7c3aed', fontWeight: '600' }}>
+                  👑 KEEPER: {isCurrentPickKeeper().playerName}
+                </span>
+              )}
             </div>
             <div style={{ fontSize: '12px', color: themeStyles.text.muted }}>
               <strong>Hotkeys:</strong> ↑↓ navigate • Enter draft • W watch • A avoid • Esc close
@@ -983,95 +1065,6 @@ const DraftTrackerContent = () => {
               </>
             )}
 
-            {/* Drafted Players Section */}
-            {quickDraftPlayers.drafted?.length > 0 && (
-              <>
-                <div style={{
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  color: themeStyles.text.secondary,
-                  padding: '8px 12px',
-                  borderBottom: `1px solid ${themeStyles.border}`,
-                  backgroundColor: themeStyles.hover.background,
-                  marginTop: quickDraftPlayers.undrafted?.length > 0 ? '16px' : '0',
-                  marginBottom: '4px'
-                }}>
-                  DRAFTED PLAYERS ({quickDraftPlayers.drafted.length})
-                </div>
-
-                {quickDraftPlayers.drafted.map((player) => {
-                  const { draftInfo } = player;
-
-                  return (
-                    <div
-                      key={`drafted-${player.id}`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '12px',
-                        borderRadius: '6px',
-                        marginBottom: '2px',
-                        backgroundColor: 'transparent',
-                        opacity: 0.6,
-                        cursor: 'default'
-                      }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <div style={{
-                          fontWeight: '500',
-                          marginBottom: '4px',
-                          color: themeStyles.text.secondary,
-                          textDecoration: 'line-through'
-                        }}>
-                          {player.name}
-                        </div>
-                        <div style={{
-                          fontSize: '12px',
-                          color: themeStyles.text.muted
-                        }}>
-                          {player.position} • {player.team} • #{player.rank}
-                        </div>
-                      </div>
-
-                      {/* Draft info */}
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'flex-end',
-                        fontSize: '11px'
-                      }}>
-                        <div style={{
-                          fontWeight: '600',
-                          color: themeStyles.text.primary,
-                          marginBottom: '2px'
-                        }}>
-                          Pick {draftInfo.pickNumber}
-                        </div>
-                        <div style={{
-                          color: themeStyles.text.muted,
-                          textAlign: 'right'
-                        }}>
-                          R{draftInfo.round}.{draftInfo.pickInRound}
-                        </div>
-                        <div style={{
-                          color: themeStyles.text.secondary,
-                          fontSize: '10px',
-                          textAlign: 'right',
-                          maxWidth: '100px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {draftInfo.draftingTeamName}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </>
-            )}
-
             {quickDraftQuery.length >= 2 && quickDraftPlayers.undrafted?.length === 0 && (
               <div style={{
                 textAlign: 'center',
@@ -1166,7 +1159,43 @@ const DraftTrackerContent = () => {
               )}
             </div>
 
-            📍 Pick {currentDraftPick} - {teamNames[currentTeam] || `Team ${currentTeam}`} On The Clock
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {isKeeperMode && (
+                <div style={{
+                  fontSize: '12px',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  👑 {keepers.length} Keepers
+                </div>
+              )}
+
+              {(() => {
+                const keeperPick = isCurrentPickKeeper();
+                if (keeperPick) {
+                  return (
+                    <div style={{
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#fbbf24',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      👑 KEEPER: {keeperPick.playerName}
+                    </div>
+                  );
+                } else {
+                  return (
+                    <span>
+                      📍 Pick {currentDraftPick} - {teamNames[currentTeam] || `Team ${currentTeam}`} On The Clock
+                    </span>
+                  );
+                }
+              })()}
+            </div>
 
             {currentCSVSource && (
               <div style={styles.csvSourceIndicator}>
@@ -1229,7 +1258,26 @@ const DraftTrackerContent = () => {
             isPlayerAvoided={isPlayerAvoided}
             watchHighlightColor={watchHighlightColor}
             avoidHighlightColor={avoidHighlightColor}
+            isKeeperMode={isKeeperMode}
+            setIsKeeperMode={setIsKeeperMode}
+            keepers={keepers}
           />
+
+          {/* Keeper Mode Panel - Only show when keeper mode is enabled */}
+          {isKeeperMode && (
+            <KeeperModePanel
+              isKeeperMode={isKeeperMode}
+              setIsKeeperMode={setIsKeeperMode}
+              keepers={keepers}
+              setKeepers={setKeepers}
+              players={players}
+              numTeams={numTeams}
+              teamNames={teamNames}
+              draftStyle={draftStyle}
+              themeStyles={themeStyles}
+              getCurrentTeam={getCurrentTeam}
+            />
+          )}
 
           {/* Settings Panel */}
           <SettingsPanel
@@ -1244,10 +1292,10 @@ const DraftTrackerContent = () => {
             isAutoDrafting={isAutoDrafting}
             setIsAutoDrafting={setIsAutoDrafting}
             isDraftRunning={isDraftRunning}
-            startDraftSequence={startDraftSequence}
+            startDraftSequence={() => {}} // Remove the startDraftSequence since we handle it differently now
             draftSpeed={draftSpeed}
             setDraftSpeed={setDraftSpeed}
-            draftStyle={setDraftStyle}
+            draftStyle={draftStyle}
             setDraftStyle={setDraftStyle}
             teamNames={teamNames}
             setTeamNames={setTeamNames}
@@ -1314,6 +1362,7 @@ const DraftTrackerContent = () => {
             draftStyle={draftStyle}
             numTeams={numTeams}
             currentDraftPick={currentDraftPick}
+            keepers={keepers}
           />
         </>
       )}

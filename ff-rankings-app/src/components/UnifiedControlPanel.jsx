@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw, Save, Trash2, Plus, Eye, X, UserPlus } from 'lucide-react';
+import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw, Save, Trash2, Plus, Eye, X, UserPlus, Crown } from 'lucide-react';
 
 const UnifiedControlPanel = ({
   themeStyles,
@@ -23,7 +23,11 @@ const UnifiedControlPanel = ({
   toggleAvoidPlayer,
   isPlayerAvoided,
   watchHighlightColor,
-  avoidHighlightColor
+  avoidHighlightColor,
+  // Keeper mode props
+  isKeeperMode,
+  setIsKeeperMode,
+  keepers
 }) => {
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -299,6 +303,20 @@ const UnifiedControlPanel = ({
       transition: 'all 0.2s',
       whiteSpace: 'nowrap'
     },
+    keeperButton: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '8px 12px',
+      borderRadius: '6px',
+      fontSize: '13px',
+      fontWeight: '500',
+      cursor: 'pointer',
+      border: 'none',
+      transition: 'all 0.2s',
+      backgroundColor: isKeeperMode ? '#7c3aed' : themeStyles.button.secondary.backgroundColor,
+      color: isKeeperMode ? '#ffffff' : themeStyles.button.secondary.color
+    },
     optionsDropdown: {
       position: 'absolute',
       top: '100%',
@@ -323,6 +341,15 @@ const UnifiedControlPanel = ({
     },
     statusIndicator: {
       fontSize: '10px',
+      marginLeft: '4px'
+    },
+    keeperStatusBadge: {
+      fontSize: '10px',
+      backgroundColor: '#7c3aed',
+      color: '#ffffff',
+      padding: '2px 6px',
+      borderRadius: '12px',
+      fontWeight: '600',
       marginLeft: '4px'
     }
   };
@@ -462,6 +489,21 @@ const UnifiedControlPanel = ({
 
         {/* Right: Controls */}
         <div style={styles.buttonGroup}>
+          {/* Keeper Mode Toggle */}
+          <button
+            onClick={() => setIsKeeperMode(!isKeeperMode)}
+            style={styles.keeperButton}
+            title={isKeeperMode ? 'Disable keeper mode' : 'Enable keeper mode'}
+          >
+            <Crown size={14} />
+            Keeper Mode
+            {isKeeperMode && keepers && keepers.length > 0 && (
+              <span style={styles.keeperStatusBadge}>
+                {keepers.length}
+              </span>
+            )}
+          </button>
+
           {/* Draft Controls */}
           <button
             onClick={undoLastDraft}

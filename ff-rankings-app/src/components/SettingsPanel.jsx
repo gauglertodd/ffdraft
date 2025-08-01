@@ -1,4 +1,4 @@
-// Fixed SettingsPanel.jsx - resolve CSS property conflicts
+// Fixed SettingsPanel.jsx - resolve variability display mismatch and improve functionality
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Settings, Bot, BarChart3, Play, Pause, ChevronUp, ChevronDown } from 'lucide-react';
@@ -53,9 +53,7 @@ const SettingsPanel = ({
     { value: 'hero_wr', label: 'Hero WR', description: 'Take elite WR early, then focus on RB/TE' },
     { value: 'zero_rb', label: 'Zero RB', description: 'Wait on RB while focusing on WR/TE early' },
     { value: 'late_qb', label: 'Late QB', description: 'Wait on QB until later rounds' },
-    { value: 'early_qb', label: 'Early QB', description: 'Secure elite QB early' },
-    { value: 'aggressive', label: 'Aggressive', description: 'Target high-upside players early' },
-    { value: 'conservative', label: 'Conservative', description: 'Prioritize safe, consistent players' }
+    { value: 'early_qb', label: 'Early QB', description: 'Secure elite QB early' }
   ];
 
   const tabs = [
@@ -108,6 +106,14 @@ const SettingsPanel = ({
     }
     setAutoDraftSettings(newSettings);
   }, [numTeams, setAutoDraftSettings]);
+
+  const setAllTeamsVariability = useCallback((variability) => {
+    const newVariability = {};
+    for (let i = 1; i <= numTeams; i++) {
+      newVariability[i] = parseFloat(variability);
+    }
+    setTeamVariability(newVariability);
+  }, [numTeams, setTeamVariability]);
 
   const styles = {
     container: {
@@ -337,22 +343,25 @@ const SettingsPanel = ({
           </button>
 
           <button
-            onClick={() => setIsAutoDrafting(false)}
-            disabled={!isDraftRunning}
+            onClick={() => {
+              setIsAutoDrafting(false);
+              setIsDraftRunning(false);
+            }}
+            disabled={!isAutoDrafting && !isDraftRunning}
             style={{
               ...styles.button,
               backgroundColor: '#f59e0b',
               color: '#ffffff',
-              opacity: !isDraftRunning ? 0.5 : 1
+              opacity: (!isAutoDrafting && !isDraftRunning) ? 0.5 : 1
             }}
           >
             <Pause size={16} />
-            Pause Auto-Draft
+            Stop Auto-Draft
           </button>
         </div>
       </div>
 
-      {/* Global Settings */}
+      {/* Global Settings - Basic */}
       <div style={styles.grid}>
         <div style={styles.formGroup}>
           <label style={styles.label}>Draft Speed</label>
@@ -375,6 +384,7 @@ const SettingsPanel = ({
         <div style={styles.formGroup}>
           <label style={styles.label}>Set All Teams</label>
           <select
+            value=""
             onChange={(e) => {
               if (e.target.value) {
                 if (e.target.value === 'randomize') {
@@ -406,7 +416,9 @@ const SettingsPanel = ({
         {Array.from({ length: numTeams }, (_, i) => {
           const teamId = i + 1;
           const strategy = autoDraftSettings[teamId] || 'manual';
-          const variability = (teamVariability[teamId] || 0.3) * 100;
+          // Fix: Ensure we get actual value or default to 0.3, then convert to percentage
+          const variabilityValue = teamVariability[teamId];
+          const variability = (variabilityValue !== undefined ? variabilityValue : 0.3) * 100;
           const selectedStrategy = strategies.find(s => s.value === strategy);
 
           if (!inputRefs.current[teamId]) {
@@ -455,24 +467,26 @@ const SettingsPanel = ({
               </div>
 
               {showAdvancedSettings && strategy !== 'manual' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '11px', color: themeStyles.text.muted }}>Variability:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', color: themeStyles.text.muted, minWidth: '40px' }}>
+                    Var:
+                  </span>
                   <input
                     type="range"
                     min="0"
                     max="100"
                     step="10"
-                    value={variability}
+                    value={Math.round(variability)}
                     onChange={(e) => setTeamVariability(prev => ({
                       ...prev,
                       [teamId]: parseInt(e.target.value) / 100
                     }))}
-                    style={{ flex: 1, height: '4px' }}
+                    style={{ flex: 1, height: '4px', maxWidth: '80px' }}
                   />
                   <span style={{
-                    fontSize: '11px',
+                    fontSize: '10px',
                     color: themeStyles.text.muted,
-                    minWidth: '30px',
+                    minWidth: '25px',
                     textAlign: 'right'
                   }}>
                     {Math.round(variability)}%
@@ -497,6 +511,58 @@ const SettingsPanel = ({
         <Settings size={14} />
         {showAdvancedSettings ? 'Hide' : 'Show'} Advanced Settings
       </button>
+
+      {/* Advanced Settings - Only show when enabled */}
+      {showAdvancedSettings && (
+        <div style={{
+          backgroundColor: themeStyles.hover.background,
+          border: `1px solid ${themeStyles.border}`,
+          borderRadius: '8px',
+          padding: '16px',
+          marginTop: '16px'
+        }}>
+          <h4 style={{
+            fontSize: '14px',
+            fontWeight: '600',
+            color: themeStyles.text.primary,
+            marginBottom: '12px',
+            marginTop: '0'
+          }}>
+            Advanced Variability Settings
+          </h4>
+
+          <div style={styles.grid}>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Set All Variability</label>
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setAllTeamsVariability(e.target.value);
+                  }
+                }}
+                style={styles.input}
+              >
+                <option value="">Select Variability...</option>
+                <option value="0">0% (Rigid)</option>
+                <option value="0.2">20% (Low)</option>
+                <option value="0.3">30% (Medium)</option>
+                <option value="0.5">50% (High)</option>
+                <option value="0.7">70% (Very High)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{
+            fontSize: '12px',
+            color: themeStyles.text.muted,
+            marginTop: '8px',
+            lineHeight: '1.4'
+          }}>
+            Variability controls how much teams deviate from their primary strategy. Higher values create more unpredictable drafting behavior.
+          </div>
+        </div>
+      )}
     </div>
   );
 
