@@ -315,6 +315,71 @@ class RBHeavyStrategy(DraftStrategy):
         return int(min(draftable, key=lambda p: p['rank'])['id'])
 
 
+class HeroWRStrategy(DraftStrategy):
+    """Hero WR strategy - take elite WR early, then focus on RB/TE"""
+
+    def __init__(self):
+        super().__init__("Hero WR", "Take elite WR early, then focus on RB/TE depth")
+
+    def __call__(self, available_players: List[dict], team_roster: TeamRoster) -> Optional[int]:
+        draftable = self._filter_draftable_players(available_players, team_roster)
+
+        if not draftable:
+            return None
+
+        # Count positions
+        wr_count = team_roster.count_position(Position.WR)
+        rb_count = team_roster.count_position(Position.RB)
+        te_count = team_roster.count_position(Position.TE)
+        qb_count = team_roster.count_position(Position.QB)
+        total_picks = sum(1 for slot in team_roster.roster_slots if slot.is_filled)
+
+        # First pick: take best WR available (the "hero")
+        if total_picks == 0:
+            wr_player = self._get_best_player_at_position(draftable, 'WR')
+            if wr_player and team_roster.can_fill_position(Position.WR):
+                return int(wr_player['id'])
+
+        # Rounds 2-6: focus on RB/TE to build supporting cast
+        if total_picks < 6 and wr_count >= 1:
+            # Prioritize RB depth first
+            if rb_count < 3:
+                rb_player = self._get_best_player_at_position(draftable, 'RB')
+                if rb_player and team_roster.can_fill_position(Position.RB):
+                    return int(rb_player['id'])
+
+            # Then get TE for receiving depth
+            if te_count < 2:
+                te_player = self._get_best_player_at_position(draftable, 'TE')
+                if te_player and team_roster.can_fill_position(Position.TE):
+                    return int(te_player['id'])
+
+            # Get second WR if great value available
+            if wr_count < 2:
+                wr_player = self._get_best_player_at_position(draftable, 'WR')
+                if wr_player and team_roster.can_fill_position(Position.WR):
+                    return int(wr_player['id'])
+
+        # Get QB if needed (rounds 4-7)
+        if qb_count == 0 and 3 <= total_picks <= 7:
+            qb_player = self._get_best_player_at_position(draftable, 'QB')
+            if qb_player and team_roster.can_fill_position(Position.QB):
+                return int(qb_player['id'])
+
+        # Late rounds: continue building RB depth and add more WRs
+        if rb_count < 4:
+            rb_player = self._get_best_player_at_position(draftable, 'RB')
+            if rb_player and team_roster.can_fill_position(Position.RB):
+                return int(rb_player['id'])
+
+        if wr_count < 4:
+            wr_player = self._get_best_player_at_position(draftable, 'WR')
+            if wr_player and team_roster.can_fill_position(Position.WR):
+                return int(wr_player['id'])
+
+        # Fill remaining needs by BPA
+        return int(min(draftable, key=lambda p: p['rank'])['id'])
+
 class HeroRBStrategy(DraftStrategy):
     """Hero RB strategy - take elite RB early, then focus on WR/TE"""
 
@@ -538,94 +603,6 @@ class BalancedStrategy(DraftStrategy):
         return int(best_player['id']) if best_player else None
 
 
-class AggressiveStrategy(DraftStrategy):
-    """Aggressive strategy - target high-upside players early"""
-
-    def __init__(self):
-        super().__init__("Aggressive", "Target high-upside players early, prioritize boom potential over floor")
-
-    def __call__(self, available_players: List[dict], team_roster: TeamRoster) -> Optional[int]:
-        draftable = self._filter_draftable_players(available_players, team_roster)
-
-        if not draftable:
-            return None
-
-        # Count positions
-        qb_count = team_roster.count_position(Position.QB)
-        rb_count = team_roster.count_position(Position.RB)
-        wr_count = team_roster.count_position(Position.WR)
-        te_count = team_roster.count_position(Position.TE)
-        total_picks = sum(1 for slot in team_roster.roster_slots if slot.is_filled)
-
-        # Early rounds: be aggressive with skill positions
-        if total_picks < 6:
-            # Prefer WR/RB with high upside (generally younger, higher draft capital)
-            if wr_count < 3:
-                wr_player = self._get_best_player_at_position(draftable, 'WR')
-                if wr_player and team_roster.can_fill_position(Position.WR):
-                    return int(wr_player['id'])
-
-            if rb_count < 2:
-                rb_player = self._get_best_player_at_position(draftable, 'RB')
-                if rb_player and team_roster.can_fill_position(Position.RB):
-                    return int(rb_player['id'])
-
-        # Get QB if needed (mid-rounds for upside QB)
-        if qb_count == 0 and 4 <= total_picks <= 8:
-            qb_player = self._get_best_player_at_position(draftable, 'QB')
-            if qb_player and team_roster.can_fill_position(Position.QB):
-                return int(qb_player['id'])
-
-        # Continue building depth
-        return int(min(draftable, key=lambda p: p['rank'])['id'])
-
-
-class ConservativeStrategy(DraftStrategy):
-    """Conservative strategy - prioritize safe, consistent players"""
-
-    def __init__(self):
-        super().__init__("Conservative", "Prioritize safe, consistent players with high floors")
-
-    def __call__(self, available_players: List[dict], team_roster: TeamRoster) -> Optional[int]:
-        draftable = self._filter_draftable_players(available_players, team_roster)
-
-        if not draftable:
-            return None
-
-        # Count positions
-        qb_count = team_roster.count_position(Position.QB)
-        rb_count = team_roster.count_position(Position.RB)
-        wr_count = team_roster.count_position(Position.WR)
-        te_count = team_roster.count_position(Position.TE)
-        total_picks = sum(1 for slot in team_roster.roster_slots if slot.is_filled)
-
-        # Early QB for consistency
-        if qb_count == 0 and total_picks < 5:
-            qb_player = self._get_best_player_at_position(draftable, 'QB')
-            if qb_player and team_roster.can_fill_position(Position.QB):
-                return int(qb_player['id'])
-
-        # Balance RB/WR conservatively
-        if rb_count < 3:
-            rb_player = self._get_best_player_at_position(draftable, 'RB')
-            if rb_player and team_roster.can_fill_position(Position.RB):
-                return int(rb_player['id'])
-
-        if wr_count < 3:
-            wr_player = self._get_best_player_at_position(draftable, 'WR')
-            if wr_player and team_roster.can_fill_position(Position.WR):
-                return int(wr_player['id'])
-
-        # Get reliable TE
-        if te_count == 0:
-            te_player = self._get_best_player_at_position(draftable, 'TE')
-            if te_player and team_roster.can_fill_position(Position.TE):
-                return int(te_player['id'])
-
-        # Fill remaining needs conservatively
-        return int(min(draftable, key=lambda p: p['rank'])['id'])
-
-
 # Strategy registry for easy access - updated with all strategies
 AVAILABLE_STRATEGIES = {
     "manual": None,  # Manual drafting - no strategy
@@ -636,11 +613,10 @@ AVAILABLE_STRATEGIES = {
     "wr_heavy": WRHeavyStrategy(),
     "rb_heavy": RBHeavyStrategy(),
     "hero_rb": HeroRBStrategy(),
+    "hero_wr": HeroWRStrategy(),
     "zero_rb": ZeroRBStrategy(),
     "late_qb": LateQBStrategy(),
     "early_qb": EarlyQBStrategy(),
-    "aggressive": AggressiveStrategy(),
-    "conservative": ConservativeStrategy()
 }
 
 

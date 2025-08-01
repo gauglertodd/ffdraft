@@ -1,3 +1,5 @@
+// Fixed SettingsPanel.jsx - resolve CSS property conflicts
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Settings, Bot, BarChart3, Play, Pause, ChevronUp, ChevronDown } from 'lucide-react';
 
@@ -48,6 +50,7 @@ const SettingsPanel = ({
     { value: 'wr_heavy', label: 'WR Heavy', description: 'Prioritize WR early and often' },
     { value: 'rb_heavy', label: 'RB Heavy', description: 'Load up on RBs early' },
     { value: 'hero_rb', label: 'Hero RB', description: 'Take elite RB early, then focus on WR/TE' },
+    { value: 'hero_wr', label: 'Hero WR', description: 'Take elite WR early, then focus on RB/TE' },
     { value: 'zero_rb', label: 'Zero RB', description: 'Wait on RB while focusing on WR/TE early' },
     { value: 'late_qb', label: 'Late QB', description: 'Wait on QB until later rounds' },
     { value: 'early_qb', label: 'Early QB', description: 'Secure elite QB early' },
@@ -153,7 +156,9 @@ const SettingsPanel = ({
     tabsContainer: {
       display: 'flex',
       backgroundColor: themeStyles.card.backgroundColor,
-      borderBottom: `1px solid ${themeStyles.border}`,
+      borderBottomWidth: '1px',
+      borderBottomStyle: 'solid',
+      borderBottomColor: themeStyles.border,
       height: isExpanded ? 'auto' : '0',
       overflow: 'hidden',
       transition: 'all 0.3s ease'
@@ -162,7 +167,9 @@ const SettingsPanel = ({
       flex: 1,
       padding: '16px 12px',
       cursor: 'pointer',
-      borderBottom: '3px solid transparent',
+      borderBottomWidth: '3px',
+      borderBottomStyle: 'solid',
+      borderBottomColor: 'transparent',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',

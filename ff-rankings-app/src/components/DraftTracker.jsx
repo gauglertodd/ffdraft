@@ -1309,6 +1309,11 @@ const DraftTrackerContent = () => {
             positionColors={positionColors}
             themeStyles={themeStyles}
             teamNames={teamNames}
+            players={players}
+            draftedPlayers={draftedPlayers}
+            draftStyle={draftStyle}
+            numTeams={numTeams}
+            currentDraftPick={currentDraftPick}
           />
         </>
       )}
