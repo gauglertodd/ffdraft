@@ -323,6 +323,7 @@ class HeroWRStrategy(DraftStrategy):
 
     def __call__(self, available_players: List[dict], team_roster: TeamRoster) -> Optional[int]:
         draftable = self._filter_draftable_players(available_players, team_roster)
+        print("These are draftable: ", draftable)
 
         if not draftable:
             return None
@@ -332,11 +333,14 @@ class HeroWRStrategy(DraftStrategy):
         rb_count = team_roster.count_position(Position.RB)
         te_count = team_roster.count_position(Position.TE)
         qb_count = team_roster.count_position(Position.QB)
+        print(f"wb/rb/te/qb counts: {wr_count} / {rb_count} / {te_count} / {qb_count}")
         total_picks = sum(1 for slot in team_roster.roster_slots if slot.is_filled)
+        print("total picks: ",total_picks)
 
         # First pick: take best WR available (the "hero")
         if total_picks == 0:
             wr_player = self._get_best_player_at_position(draftable, 'WR')
+            print(wr_player, team_roster.can_fill_position(Position.WR))
             if wr_player and team_roster.can_fill_position(Position.WR):
                 return int(wr_player['id'])
 

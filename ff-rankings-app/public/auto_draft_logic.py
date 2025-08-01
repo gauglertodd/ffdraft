@@ -31,6 +31,9 @@ def apply_strategy_variability(available_players: List[dict], strategy_result_id
     Returns:
         Final player ID after applying variability
     """
+    if random.random() > variability:
+        return strategy_result_id
+
     if variability <= 0.0 or not available_players:
         return strategy_result_id
 
@@ -50,7 +53,7 @@ def apply_strategy_variability(available_players: List[dict], strategy_result_id
     num_players = min(len(available_sorted), 10)  # Consider top 10 players max
 
     if variability <= 0.3:  # Low variability - focused on top picks
-        weights = [0.6, 0.25, 0.10, 0.05] + [0.0] * (num_players - 4)
+        weights = [0.85, 0.15, 0.00, 0.00] + [0.0] * (num_players - 4)
     elif variability <= 0.6:  # Medium variability - some deviation
         weights = [0.4, 0.3, 0.15, 0.10, 0.05] + [0.0] * (num_players - 5)
     else:  # High variability - more unpredictable
