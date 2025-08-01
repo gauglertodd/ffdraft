@@ -51,7 +51,10 @@ const UnifiedControlPanel = ({
     'ESPN ADP.csv',
     'FFPC ADP.csv',
     'Y! ADP.csv',
-    'LateRoundDraft.csv'
+    'FantasyPros .5 PPR.csv',
+    'FantasyPros 2025 Top 10 Accurate Overall PPR.csv',
+    'FantasyNow+ PPR.csv',
+    'The Fantasy Headliners PPR.csv'
   ];
 
   // Generate friendly names from filenames
