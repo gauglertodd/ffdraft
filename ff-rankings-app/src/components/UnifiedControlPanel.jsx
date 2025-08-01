@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw, Save, Trash2, Plus } from 'lucide-react';
+import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw, Save, Trash2, Plus, Eye, X, UserPlus } from 'lucide-react';
 
 const UnifiedControlPanel = ({
   themeStyles,
@@ -8,285 +8,87 @@ const UnifiedControlPanel = ({
   onNewCSV,
   searchQuery,
   setSearchQuery,
-  selectedPosition,
-  setSelectedPosition,
-  positions,
   players,
   draftPlayer,
-  currentDraftPick,
-  currentTeam,
-  teamNames,
   onRestartDraft,
   onSwitchCSV,
   onNewDraft,
   onSaveDraft,
   onClearSavedState,
-  numTeams,
-  draftStyle
+  // Watch/Avoid functionality
+  watchedPlayers,
+  toggleWatchPlayer,
+  isPlayerWatched,
+  avoidedPlayers,
+  toggleAvoidPlayer,
+  isPlayerAvoided,
+  watchHighlightColor,
+  avoidHighlightColor
 }) => {
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
 
-  // Search dropdown state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [filteredDropdownPlayers, setFilteredDropdownPlayers] = useState({ undrafted: [], drafted: [] });
-
-  // CSV switching state
+  const [filteredPlayers, setFilteredPlayers] = useState([]);
   const [showCSVOptions, setShowCSVOptions] = useState(false);
-  const [isLoadingPreset, setIsLoadingPreset] = useState(false);
   const [availableCSVs, setAvailableCSVs] = useState([]);
-  const [isScanning, setIsScanning] = useState(false);
-
-  // Save state tracking
-  const [lastSaveTime, setLastSaveTime] = useState(null);
-  const [showSaveOptions, setShowSaveOptions] = useState(false);
+  const [isLoadingPreset, setIsLoadingPreset] = useState(false);
 
   // Common CSV filenames to check for
-  const commonCSVNames = [
+  const csvFiles = [
     'FantasyPros 2025 PPR.csv',
     '4for4 Underdog ADP.csv',
-    'BB10s ADP.csv',
-    'CBS ADP.csv',
     'ESPN ADP.csv',
-    'FFPC ADP.csv',
-    'Y! ADP.csv',
-    'FantasyPros .5 PPR.csv',
-    'FantasyPros 2025 Top 10 Accurate Overall PPR.csv',
-    'FantasyNow+ PPR.csv',
-    'The Fantasy Headliners PPR.csv'
+    'Yahoo ADP.csv'
   ];
 
-  // Generate friendly names from filenames
-  const generateFriendlyName = (filename) => {
-    const nameWithoutExt = filename.replace('.csv', '');
+  // Filter players for search dropdown
+  useEffect(() => {
+    if (searchQuery.length >= 2) {
+      const searchLower = searchQuery.toLowerCase();
+      const matches = players
+        .filter(player => {
+          const matchesSearch = player.name.toLowerCase().includes(searchLower) ||
+                              player.team.toLowerCase().includes(searchLower);
+          return matchesSearch && !draftedPlayers.includes(player.id);
+        })
+        .slice(0, 8); // Increased to show more results
 
-    if (nameWithoutExt.includes('fantasypros')) {
-      return nameWithoutExt.replace('fantasypros_', 'FantasyPros ').replace('_', ' ');
+      setFilteredPlayers(matches);
+      setIsDropdownOpen(matches.length > 0);
+      setSelectedIndex(-1);
+    } else {
+      setFilteredPlayers([]);
+      setIsDropdownOpen(false);
     }
-    if (nameWithoutExt.includes('espn')) {
-      return nameWithoutExt.replace('espn_', 'ESPN ').replace('_', ' ');
-    }
-    if (nameWithoutExt.includes('yahoo')) {
-      return nameWithoutExt.replace('yahoo_', 'Yahoo ').replace('_', ' ');
-    }
-    if (nameWithoutExt.includes('sleeper')) {
-      return nameWithoutExt.replace('sleeper_', 'Sleeper ').replace('_', ' ');
-    }
-    if (nameWithoutExt.includes('sample')) {
-      return 'Sample Rankings';
-    }
+  }, [searchQuery, players, draftedPlayers]);
 
-    return nameWithoutExt
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
-  // Scan for available CSV files in the public directory
+  // Scan for CSV files
   const scanForCSVFiles = async () => {
-    setIsScanning(true);
     const foundFiles = [];
-
-    for (const filename of commonCSVNames) {
+    for (const filename of csvFiles) {
       try {
         const response = await fetch(`/${filename}`, { method: 'HEAD' });
         if (response.ok) {
           foundFiles.push({
             filename,
-            name: generateFriendlyName(filename),
+            name: filename.replace('.csv', ''),
             description: 'Available rankings'
           });
         }
       } catch (error) {
-        // File doesn't exist or isn't accessible, skip silently
+        // File doesn't exist, skip
       }
     }
-
     setAvailableCSVs(foundFiles);
-    setIsScanning(false);
   };
 
-  // Memoized draft info calculation to avoid recalculating on every render
-  const getDraftInfoMemo = React.useMemo(() => {
-    const draftInfoCache = {};
-
-    return (playerId) => {
-      if (draftInfoCache[playerId]) {
-        return draftInfoCache[playerId];
-      }
-
-      const draftIndex = draftedPlayers.indexOf(playerId);
-      if (draftIndex === -1) return null;
-
-      const pickNumber = draftIndex + 1;
-      const round = Math.ceil(pickNumber / numTeams);
-
-      // Calculate team based on draft style and pick number
-      const teamId = (() => {
-        const roundIndex = Math.floor((pickNumber - 1) / numTeams);
-        const positionInRound = (pickNumber - 1) % numTeams;
-
-        if (draftStyle === 'snake') {
-          if (roundIndex % 2 === 0) {
-            return positionInRound + 1;
-          } else {
-            return numTeams - positionInRound;
-          }
-        } else {
-          return positionInRound + 1;
-        }
-      })();
-
-      const teamName = teamNames[teamId] || `Team ${teamId}`;
-
-      const result = {
-        pickNumber,
-        round,
-        teamId,
-        teamName
-      };
-
-      draftInfoCache[playerId] = result;
-      return result;
-    };
-  }, [draftedPlayers, numTeams, draftStyle, teamNames]);
-
-  // Scan for files when CSV options are first opened
-  useEffect(() => {
-    if (showCSVOptions && availableCSVs.length === 0 && !isScanning) {
-      scanForCSVFiles();
-    }
-  }, [showCSVOptions, availableCSVs.length, isScanning]);
-
-  // Filter players for dropdown - optimized for performance
-  useEffect(() => {
-    if (searchQuery.length > 0) {
-      // Only search if query is at least 2 characters for better performance
-      if (searchQuery.length >= 2) {
-        const searchLower = searchQuery.toLowerCase();
-
-        // Single pass through players array
-        const undraftedPlayers = [];
-        const draftedMatchingPlayers = [];
-
-        for (let i = 0; i < players.length && (undraftedPlayers.length < 6 || draftedMatchingPlayers.length < 4); i++) {
-          const player = players[i];
-          const matchesSearch = player.name.toLowerCase().includes(searchLower) ||
-                              player.team.toLowerCase().includes(searchLower);
-
-          if (matchesSearch) {
-            if (!draftedPlayers.includes(player.id) && undraftedPlayers.length < 6) {
-              undraftedPlayers.push(player);
-            } else if (draftedPlayers.includes(player.id) && draftedMatchingPlayers.length < 4) {
-              draftedMatchingPlayers.push(player);
-            }
-          }
-        }
-
-        setFilteredDropdownPlayers({ undrafted: undraftedPlayers, drafted: draftedMatchingPlayers });
-        setIsDropdownOpen(undraftedPlayers.length > 0 || draftedMatchingPlayers.length > 0);
-        setSelectedIndex(-1);
-      } else {
-        // Don't search for single characters
-        setFilteredDropdownPlayers({ undrafted: [], drafted: [] });
-        setIsDropdownOpen(false);
-        setSelectedIndex(-1);
-      }
-    } else {
-      setFilteredDropdownPlayers({ undrafted: [], drafted: [] });
-      setIsDropdownOpen(false);
-      setSelectedIndex(-1);
-    }
-  }, [searchQuery, players, draftedPlayers]);
-
-  // Handle keyboard navigation
-  const handleKeyDown = (e) => {
-    const totalUndrafted = filteredDropdownPlayers.undrafted?.length || 0;
-    const totalItems = totalUndrafted; // Only navigate through undrafted players
-
-    if (!isDropdownOpen || totalItems === 0) return;
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setSelectedIndex(prev =>
-          prev < totalItems - 1 ? prev + 1 : prev
-        );
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (selectedIndex >= 0 && selectedIndex < totalUndrafted) {
-          const selectedPlayer = filteredDropdownPlayers.undrafted[selectedIndex];
-          draftPlayer(selectedPlayer.id);
-          setSearchQuery('');
-          setIsDropdownOpen(false);
-          setSelectedIndex(-1);
-        }
-        break;
-      case 'Escape':
-        setIsDropdownOpen(false);
-        setSelectedIndex(-1);
-        break;
-    }
-  };
-
-  // Handle clicking on dropdown item
-  const handleDropdownClick = (player) => {
-    draftPlayer(player.id);
-    setSearchQuery('');
-    setIsDropdownOpen(false);
-    setSelectedIndex(-1);
-  };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsDropdownOpen(false);
-        setSelectedIndex(-1);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Handle manual save
-  const handleManualSave = () => {
-    if (onSaveDraft) {
-      onSaveDraft();
-      setLastSaveTime(Date.now());
-      setShowSaveOptions(false);
-    }
-  };
-
-  // Handle clear saved state
-  const handleClearSavedState = () => {
-    const confirmed = window.confirm(
-      "Clear all saved draft data? This will remove the saved state from your browser but won't affect your current session."
-    );
-
-    if (confirmed && onClearSavedState) {
-      onClearSavedState();
-      setLastSaveTime(null);
-    }
-  };
-
-  // Handle preset CSV loading
+  // Load preset CSV
   const handlePresetLoad = async (filename) => {
     setIsLoadingPreset(true);
-
     try {
       const response = await fetch(`/${filename}`);
-      if (!response.ok) {
-        throw new Error(`Failed to load ${filename}: ${response.status}`);
-      }
-
       const csvText = await response.text();
       const blob = new Blob([csvText], { type: 'text/csv' });
       const file = new File([blob], filename, { type: 'text/csv' });
@@ -296,15 +98,58 @@ const UnifiedControlPanel = ({
       } else {
         onNewCSV(file);
       }
-
       setShowCSVOptions(false);
     } catch (error) {
-      console.error('Error loading preset file:', error);
-      alert(`Failed to load ${filename}. Make sure the file exists in your public/ directory.`);
+      alert(`Failed to load ${filename}`);
     } finally {
       setIsLoadingPreset(false);
     }
   };
+
+  // Keyboard navigation for search
+  const handleKeyDown = (e) => {
+    if (!isDropdownOpen || filteredPlayers.length === 0) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedIndex(prev => prev < filteredPlayers.length - 1 ? prev + 1 : prev);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedIndex >= 0) {
+          draftPlayer(filteredPlayers[selectedIndex].id);
+          setSearchQuery('');
+          setIsDropdownOpen(false);
+        }
+        break;
+      case 'Escape':
+        setIsDropdownOpen(false);
+        break;
+    }
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Scan for CSV files when options are opened
+  useEffect(() => {
+    if (showCSVOptions && availableCSVs.length === 0) {
+      scanForCSVFiles();
+    }
+  }, [showCSVOptions]);
 
   const styles = {
     panel: {
@@ -313,27 +158,130 @@ const UnifiedControlPanel = ({
       padding: '16px 24px',
       marginBottom: '24px'
     },
-    mainRow: {
+    row: {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       flexWrap: 'wrap',
       gap: '16px'
     },
-    leftSection: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '16px',
+    searchContainer: {
+      position: 'relative',
       flex: '1',
-      minWidth: '0'
+      maxWidth: '400px',
+      minWidth: '250px'
     },
-    rightSection: {
+    searchInput: {
+      ...themeStyles.input,
+      width: '100%',
+      paddingLeft: '36px',
+      padding: '8px 16px 8px 36px',
+      borderRadius: '6px',
+      fontSize: '14px',
+      outline: 'none'
+    },
+    searchIcon: {
+      position: 'absolute',
+      left: '10px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      color: themeStyles.text.muted
+    },
+    dropdown: {
+      position: 'absolute',
+      top: '100%',
+      left: '0',
+      right: '0',
+      backgroundColor: themeStyles.card.backgroundColor,
+      border: `1px solid ${themeStyles.border}`,
+      borderTop: 'none',
+      borderRadius: '0 0 6px 6px',
+      maxHeight: '320px',
+      overflowY: 'auto',
+      zIndex: 1000,
+      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+    },
+    dropdownItem: {
+      padding: '12px 16px',
+      cursor: 'pointer',
+      borderBottom: `1px solid ${themeStyles.border}`,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      transition: 'background-color 0.2s'
+    },
+    dropdownItemSelected: {
+      backgroundColor: '#2563eb',
+      color: '#ffffff'
+    },
+    dropdownItemHover: {
+      backgroundColor: themeStyles.hover.background
+    },
+    playerInfo: {
+      flex: 1,
+      minWidth: 0
+    },
+    playerName: {
+      fontWeight: '500',
+      fontSize: '14px',
+      marginBottom: '2px',
       display: 'flex',
       alignItems: 'center',
-      gap: '16px',
-      flexWrap: 'wrap'
+      gap: '8px'
     },
-    controlGroup: {
+    playerMeta: {
+      fontSize: '12px',
+      color: themeStyles.text.secondary,
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    },
+    playerRank: {
+      fontSize: '12px',
+      color: themeStyles.text.muted,
+      fontWeight: '500',
+      minWidth: '35px',
+      textAlign: 'right'
+    },
+    actionButtons: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      marginLeft: '12px'
+    },
+    actionButton: {
+      padding: '4px',
+      border: 'none',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      display: 'flex',
+      alignItems: 'center',
+      fontSize: '12px'
+    },
+    watchButton: {
+      backgroundColor: 'transparent',
+      color: themeStyles.text.muted
+    },
+    watchButtonActive: {
+      backgroundColor: watchHighlightColor,
+      color: '#ffffff'
+    },
+    avoidButton: {
+      backgroundColor: 'transparent',
+      color: themeStyles.text.muted
+    },
+    avoidButtonActive: {
+      backgroundColor: avoidHighlightColor,
+      color: '#ffffff'
+    },
+    draftButton: {
+      backgroundColor: '#16a34a',
+      color: '#ffffff',
+      padding: '4px 8px',
+      fontWeight: '500'
+    },
+    buttonGroup: {
       display: 'flex',
       alignItems: 'center',
       gap: '8px'
@@ -351,128 +299,6 @@ const UnifiedControlPanel = ({
       transition: 'all 0.2s',
       whiteSpace: 'nowrap'
     },
-    buttonSecondary: {
-      ...themeStyles.button.secondary
-    },
-    buttonPrimary: {
-      ...themeStyles.button.primary
-    },
-    buttonDanger: {
-      backgroundColor: '#dc2626',
-      color: '#ffffff'
-    },
-    buttonSuccess: {
-      backgroundColor: '#16a34a',
-      color: '#ffffff'
-    },
-    buttonWarning: {
-      backgroundColor: '#f59e0b',
-      color: '#ffffff'
-    },
-    buttonDisabled: {
-      opacity: '0.5',
-      cursor: 'not-allowed'
-    },
-    searchContainer: {
-      position: 'relative',
-      flex: '1',
-      maxWidth: '400px',
-      minWidth: '250px'
-    },
-    searchInputGroup: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px'
-    },
-    searchInputWrapper: {
-      position: 'relative',
-      flex: '1'
-    },
-    searchInput: {
-      ...themeStyles.input,
-      width: '100%',
-      paddingLeft: '36px',
-      paddingRight: '16px',
-      paddingTop: '8px',
-      paddingBottom: '8px',
-      borderRadius: '6px',
-      fontSize: '14px',
-      outline: 'none'
-    },
-    searchIcon: {
-      position: 'absolute',
-      left: '10px',
-      top: '50%',
-      transform: 'translateY(-50%)',
-      color: themeStyles.text.muted
-    },
-    ctrlKHint: {
-      fontSize: '11px',
-      color: themeStyles.text.muted,
-      backgroundColor: themeStyles.hover.background,
-      padding: '4px 8px',
-      borderRadius: '4px',
-      whiteSpace: 'nowrap',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '4px',
-      flexShrink: 0
-    },
-    kbd: {
-      backgroundColor: themeStyles.card.backgroundColor,
-      border: `1px solid ${themeStyles.border}`,
-      borderRadius: '3px',
-      padding: '2px 4px',
-      fontSize: '10px',
-      fontWeight: 'bold'
-    },
-    divider: {
-      width: '1px',
-      height: '20px',
-      backgroundColor: themeStyles.border,
-      margin: '0 8px'
-    },
-    dropdown: {
-      position: 'absolute',
-      top: '100%',
-      left: '0',
-      right: '0',
-      backgroundColor: themeStyles.card.backgroundColor,
-      border: `1px solid ${themeStyles.border}`,
-      borderTop: 'none',
-      borderRadius: '0 0 6px 6px',
-      maxHeight: '250px',
-      overflowY: 'auto',
-      zIndex: 1000,
-      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-    },
-    dropdownItem: {
-      padding: '10px 12px',
-      cursor: 'pointer',
-      borderBottom: `1px solid ${themeStyles.border}`,
-      transition: 'background-color 0.2s',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between'
-    },
-    dropdownItemSelected: {
-      backgroundColor: '#2563eb',
-      color: '#ffffff'
-    },
-    playerDropdownName: {
-      fontWeight: '500',
-      fontSize: '13px'
-    },
-    playerDropdownMeta: {
-      fontSize: '11px',
-      color: themeStyles.text.secondary,
-      marginTop: '2px'
-    },
-    playerDropdownRank: {
-      fontSize: '11px',
-      color: themeStyles.text.muted,
-      fontWeight: '500'
-    },
     optionsDropdown: {
       position: 'absolute',
       top: '100%',
@@ -487,512 +313,290 @@ const UnifiedControlPanel = ({
       boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
       marginTop: '4px'
     },
-    optionHeader: {
-      padding: '12px 16px',
-      borderBottom: `1px solid ${themeStyles.border}`,
-      fontSize: '13px',
-      fontWeight: '600',
-      color: themeStyles.text.primary,
-      backgroundColor: themeStyles.hover.background,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between'
-    },
     optionItem: {
       padding: '12px 16px',
       cursor: 'pointer',
       borderBottom: `1px solid ${themeStyles.border}`,
-      transition: 'background-color 0.2s',
       display: 'flex',
       alignItems: 'center',
       gap: '8px'
     },
-    optionItemHover: {
-      backgroundColor: themeStyles.hover.background
-    },
-    optionText: {
-      flex: '1'
-    },
-    optionName: {
-      fontSize: '13px',
-      fontWeight: '500',
-      color: themeStyles.text.primary,
-      marginBottom: '2px'
-    },
-    optionDesc: {
-      fontSize: '11px',
-      color: themeStyles.text.secondary
-    },
-    uploadOptionItem: {
-      padding: '12px 16px',
-      cursor: 'pointer',
-      borderBottom: `1px solid ${themeStyles.border}`,
-      transition: 'background-color 0.2s',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      color: '#2563eb',
-      fontWeight: '500'
-    },
-    noFilesMessage: {
-      padding: '16px',
-      textAlign: 'center',
-      color: themeStyles.text.muted,
-      fontSize: '12px',
-      fontStyle: 'italic'
-    },
-    scanningMessage: {
-      padding: '16px',
-      textAlign: 'center',
-      color: themeStyles.text.secondary,
-      fontSize: '12px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '8px'
-    },
-    scanningSpinner: {
-      width: '14px',
-      height: '14px',
-      border: '2px solid #e5e7eb',
-      borderTop: '2px solid #2563eb',
-      borderRadius: '50%',
-      animation: 'spin 1s linear infinite'
-    },
-    rescanButton: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '4px',
-      padding: '4px 8px',
-      borderRadius: '4px',
-      fontSize: '11px',
-      fontWeight: '500',
-      cursor: 'pointer',
-      border: 'none',
-      transition: 'all 0.2s',
-      backgroundColor: 'transparent',
-      color: themeStyles.text.muted
-    },
-    saveStatus: {
-      fontSize: '11px',
-      color: themeStyles.text.muted,
-      padding: '8px 16px',
-      fontStyle: 'italic'
+    statusIndicator: {
+      fontSize: '10px',
+      marginLeft: '4px'
     }
   };
 
   return (
     <div style={styles.panel}>
-      <div style={styles.mainRow}>
-        {/* Left: Search Controls */}
-        <div style={styles.leftSection}>
-          <div style={styles.controlGroup} ref={dropdownRef}>
-            <div style={styles.searchContainer}>
-              <div style={styles.searchInputGroup}>
-                <div style={styles.searchInputWrapper}>
-                  <Search style={styles.searchIcon} size={14} />
-                  <input
-                    type="text"
-                    placeholder="Search and draft players..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    style={styles.searchInput}
-                  />
+      <div style={styles.row}>
+        {/* Left: Search with enhanced dropdown */}
+        <div style={styles.searchContainer} ref={dropdownRef}>
+          <Search style={styles.searchIcon} size={14} />
+          <input
+            type="text"
+            placeholder="Search, watch, avoid, or draft players..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            style={styles.searchInput}
+          />
 
-                  {/* Search Dropdown */}
-                  {isDropdownOpen && (
-                    <div style={styles.dropdown}>
-                      {/* Undrafted Players Section */}
-                      {filteredDropdownPlayers.undrafted?.length > 0 && (
-                        <>
-                          {filteredDropdownPlayers.undrafted.map((player, index) => {
-                            const isSelected = index === selectedIndex;
+          {isDropdownOpen && (
+            <div style={styles.dropdown}>
+              {filteredPlayers.map((player, index) => {
+                const isSelected = index === selectedIndex;
+                const isWatched = isPlayerWatched(player.id);
+                const isAvoided = isPlayerAvoided(player.id);
 
-                            return (
-                              <div
-                                key={player.id}
-                                style={{
-                                  ...styles.dropdownItem,
-                                  ...(isSelected ? styles.dropdownItemSelected : {})
-                                }}
-                                onClick={() => handleDropdownClick(player)}
-                                onMouseEnter={() => setSelectedIndex(index)}
-                              >
-                                <div>
-                                  <div style={{
-                                    ...styles.playerDropdownName,
-                                    color: isSelected ? '#ffffff' : themeStyles.text.primary
-                                  }}>
-                                    {player.name}
-                                  </div>
-                                  <div style={{
-                                    ...styles.playerDropdownMeta,
-                                    color: isSelected ? '#e0e7ff' : themeStyles.text.secondary
-                                  }}>
-                                    {player.position} • {player.team}
-                                  </div>
-                                </div>
-                                <div style={{
-                                  ...styles.playerDropdownRank,
-                                  color: isSelected ? '#e0e7ff' : themeStyles.text.muted
-                                }}>
-                                  #{player.rank}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </>
-                      )}
-
-                      {/* Drafted Players Section */}
-                      {filteredDropdownPlayers.drafted?.length > 0 && (
-                        <>
-                          {/* Section Divider */}
-                          {filteredDropdownPlayers.undrafted?.length > 0 && (
-                            <div style={{
-                              padding: '8px 12px',
-                              backgroundColor: themeStyles.hover.background,
-                              borderTop: `1px solid ${themeStyles.border}`,
-                              borderBottom: `1px solid ${themeStyles.border}`,
-                              fontSize: '11px',
-                              fontWeight: '600',
-                              color: themeStyles.text.secondary
-                            }}>
-                              Already Drafted
-                            </div>
-                          )}
-
-                          {filteredDropdownPlayers.drafted.map((player) => {
-                            const draftInfo = getDraftInfoMemo(player.id);
-
-                            return (
-                              <div
-                                key={player.id}
-                                style={{
-                                  ...styles.dropdownItem,
-                                  opacity: 0.7,
-                                  cursor: 'default',
-                                  backgroundColor: themeStyles.hover.background
-                                }}
-                              >
-                                <div style={{ flex: 1 }}>
-                                  <div style={{
-                                    ...styles.playerDropdownName,
-                                    color: themeStyles.text.secondary,
-                                    textDecoration: 'line-through'
-                                  }}>
-                                    {player.name}
-                                  </div>
-                                  <div style={{
-                                    ...styles.playerDropdownMeta,
-                                    color: themeStyles.text.muted
-                                  }}>
-                                    {player.position} • {player.team}
-                                  </div>
-                                  {draftInfo && (
-                                    <div style={{
-                                      fontSize: '10px',
-                                      color: themeStyles.text.muted,
-                                      marginTop: '2px'
-                                    }}>
-                                      Pick {draftInfo.pickNumber} • Round {draftInfo.round} • {draftInfo.teamName}
-                                    </div>
-                                  )}
-                                </div>
-                                <div style={{
-                                  ...styles.playerDropdownRank,
-                                  color: themeStyles.text.muted
-                                }}>
-                                  #{player.rank}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </>
-                      )}
-
-                      {/* No Results */}
-                      {(!filteredDropdownPlayers.undrafted?.length && !filteredDropdownPlayers.drafted?.length) && searchQuery && (
-                        <div style={{ ...styles.dropdownItem, cursor: 'default' }}>
-                          <div style={{ color: themeStyles.text.muted, fontSize: '14px' }}>
-                            No players found
-                          </div>
-                        </div>
-                      )}
+                return (
+                  <div
+                    key={player.id}
+                    style={{
+                      ...styles.dropdownItem,
+                      ...(isSelected ? styles.dropdownItemSelected : {}),
+                      // Add subtle background for watched/avoided players
+                      backgroundColor: isSelected ? '#2563eb' :
+                        isWatched ? `${watchHighlightColor}20` :
+                        isAvoided ? `${avoidHighlightColor}20` : 'transparent'
+                    }}
+                    onMouseEnter={() => setSelectedIndex(index)}
+                  >
+                    <div style={styles.playerInfo}>
+                      <div style={{
+                        ...styles.playerName,
+                        color: isSelected ? '#ffffff' : themeStyles.text.primary
+                      }}>
+                        {player.name}
+                        {isWatched && <span style={styles.statusIndicator}>👁️</span>}
+                        {isAvoided && <span style={styles.statusIndicator}>🚫</span>}
+                      </div>
+                      <div style={{
+                        ...styles.playerMeta,
+                        color: isSelected ? '#e0e7ff' : themeStyles.text.secondary
+                      }}>
+                        <span>{player.position}</span>
+                        <span>•</span>
+                        <span>{player.team}</span>
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                <div style={styles.ctrlKHint}>
-                  Quick: <span style={styles.kbd}>Ctrl+K</span>
-                </div>
-              </div>
-            </div>
-          </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        ...styles.playerRank,
+                        color: isSelected ? '#e0e7ff' : themeStyles.text.muted
+                      }}>
+                        #{player.rank}
+                      </div>
 
-          {players.length > 0 && (
-            <div style={{ fontSize: '11px', color: themeStyles.text.secondary, whiteSpace: 'nowrap' }}>
-              {draftedPlayers.length} / {players.length} drafted
+                      <div style={styles.actionButtons}>
+                        {/* Watch Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleWatchPlayer(player.id);
+                          }}
+                          style={{
+                            ...styles.actionButton,
+                            ...(isWatched ? styles.watchButtonActive : styles.watchButton),
+                            opacity: isSelected ? 0.9 : 1
+                          }}
+                          title={isWatched ? 'Remove from watch list' : 'Add to watch list'}
+                        >
+                          <Eye size={12} />
+                        </button>
+
+                        {/* Avoid Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleAvoidPlayer(player.id);
+                          }}
+                          style={{
+                            ...styles.actionButton,
+                            ...(isAvoided ? styles.avoidButtonActive : styles.avoidButton),
+                            opacity: isSelected ? 0.9 : 1
+                          }}
+                          title={isAvoided ? 'Remove from avoid list' : 'Add to avoid list'}
+                        >
+                          <X size={12} />
+                        </button>
+
+                        {/* Draft Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            draftPlayer(player.id);
+                            setSearchQuery('');
+                            setIsDropdownOpen(false);
+                          }}
+                          style={{
+                            ...styles.actionButton,
+                            ...styles.draftButton,
+                            opacity: isSelected ? 0.9 : 1
+                          }}
+                          title="Draft player"
+                        >
+                          <UserPlus size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {filteredPlayers.length === 0 && searchQuery.length >= 2 && (
+                <div style={{
+                  ...styles.dropdownItem,
+                  cursor: 'default',
+                  justifyContent: 'center'
+                }}>
+                  <div style={{ color: themeStyles.text.muted, fontSize: '14px' }}>
+                    No undrafted players found
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Right: Action Controls */}
-        <div style={styles.rightSection}>
+        {/* Right: Controls */}
+        <div style={styles.buttonGroup}>
           {/* Draft Controls */}
-          <div style={styles.controlGroup}>
+          <button
+            onClick={undoLastDraft}
+            disabled={draftedPlayers.length === 0}
+            style={{
+              ...styles.button,
+              ...themeStyles.button.secondary,
+              opacity: draftedPlayers.length === 0 ? 0.5 : 1
+            }}
+          >
+            <Undo2 size={14} />
+            Undo
+          </button>
+
+          <button
+            onClick={onRestartDraft}
+            disabled={draftedPlayers.length === 0}
+            style={{
+              ...styles.button,
+              backgroundColor: '#f59e0b',
+              color: '#ffffff',
+              opacity: draftedPlayers.length === 0 ? 0.5 : 1
+            }}
+          >
+            <RotateCcw size={14} />
+            Restart
+          </button>
+
+          <button
+            onClick={onNewDraft}
+            style={{
+              ...styles.button,
+              backgroundColor: '#dc2626',
+              color: '#ffffff'
+            }}
+          >
+            <Plus size={14} />
+            New Draft
+          </button>
+
+          {/* Save Controls */}
+          <button
+            onClick={onSaveDraft}
+            style={{
+              ...styles.button,
+              ...themeStyles.button.success
+            }}
+          >
+            <Save size={14} />
+            Save
+          </button>
+
+          <button
+            onClick={onClearSavedState}
+            style={{
+              ...styles.button,
+              backgroundColor: '#dc2626',
+              color: '#ffffff'
+            }}
+          >
+            <Trash2 size={14} />
+            Clear
+          </button>
+
+          {/* CSV Controls */}
+          <div style={{ position: 'relative' }}>
             <button
-              onClick={undoLastDraft}
-              disabled={draftedPlayers.length === 0}
+              onClick={() => setShowCSVOptions(!showCSVOptions)}
               style={{
                 ...styles.button,
-                ...styles.buttonSecondary,
-                ...(draftedPlayers.length === 0 ? styles.buttonDisabled : {})
+                ...themeStyles.button.secondary
               }}
-              title="Undo last draft pick"
             >
-              <Undo2 size={14} />
-              Undo
+              <RefreshCw size={14} />
+              Switch
             </button>
 
-            <button
-              onClick={onRestartDraft}
-              disabled={draftedPlayers.length === 0}
-              style={{
-                ...styles.button,
-                ...styles.buttonWarning,
-                ...(draftedPlayers.length === 0 ? styles.buttonDisabled : {})
-              }}
-              title="Restart the draft (keep settings and CSV)"
-            >
-              <RotateCcw size={14} />
-              Restart
-            </button>
-
-            <button
-              onClick={onNewDraft}
-              style={{
-                ...styles.button,
-                ...styles.buttonDanger
-              }}
-              title="Start completely new draft (clear everything)"
-            >
-              <Plus size={14} />
-              New Draft
-            </button>
-          </div>
-
-          <div style={styles.divider} />
-
-          {/* Save and Clear Controls */}
-          <div style={styles.controlGroup}>
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowSaveOptions(!showSaveOptions)}
-                style={{
-                  ...styles.button,
-                  ...styles.buttonSuccess
-                }}
-                title="Save options"
-              >
-                <Save size={14} />
-                Save
-              </button>
-
-              {/* Save Options Dropdown */}
-              {showSaveOptions && (
-                <div style={styles.optionsDropdown}>
-                  <div style={styles.optionHeader}>
-                    Draft Save Options
-                  </div>
-
+            {showCSVOptions && (
+              <div style={styles.optionsDropdown}>
+                {availableCSVs.map((preset) => (
                   <div
+                    key={preset.filename}
                     style={styles.optionItem}
-                    onClick={handleManualSave}
-                    onMouseEnter={(e) => {
-                      Object.assign(e.target.style, styles.optionItemHover);
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.backgroundColor = '';
-                    }}
+                    onClick={() => handlePresetLoad(preset.filename)}
                   >
-                    <Save size={16} color={themeStyles.text.muted} />
-                    <div style={styles.optionText}>
-                      <div style={styles.optionName}>Save Now</div>
-                      <div style={styles.optionDesc}>Manual save current state</div>
-                    </div>
-                  </div>
-
-                  <div style={styles.saveStatus}>
-                    {lastSaveTime ?
-                      `Last saved: ${new Date(lastSaveTime).toLocaleTimeString()}` :
-                      'Auto-saves every change'
-                    }
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={handleClearSavedState}
-              style={{
-                ...styles.button,
-                ...styles.buttonDanger
-              }}
-              title="Clear all saved draft data from browser storage"
-            >
-              <Trash2 size={14} />
-              Clear Saved
-            </button>
-          </div>
-
-          <div style={styles.divider} />
-
-          {/* File Controls */}
-          <div style={styles.controlGroup}>
-            {/* CSV Switch Button */}
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowCSVOptions(!showCSVOptions)}
-                style={{
-                  ...styles.button,
-                  ...styles.buttonSecondary
-                }}
-                title="Switch to different rankings"
-              >
-                <RefreshCw size={14} />
-                Switch Rankings
-              </button>
-
-              {/* CSV Options Dropdown */}
-              {showCSVOptions && (
-                <div style={styles.optionsDropdown}>
-                  <div style={styles.optionHeader}>
-                    <span>Choose Rankings</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        scanForCSVFiles();
-                      }}
-                      style={{
-                        ...styles.rescanButton,
-                        opacity: isScanning ? 0.6 : 1
-                      }}
-                      disabled={isScanning}
-                      title="Rescan for CSV files"
-                    >
-                      <RefreshCw size={12} style={{
-                        animation: isScanning ? 'spin 1s linear infinite' : 'none'
-                      }} />
-                      Rescan
-                    </button>
-                  </div>
-
-                  {/* Scanning State */}
-                  {isScanning && (
-                    <div style={styles.scanningMessage}>
-                      <div style={styles.scanningSpinner} />
-                      Scanning public/ directory...
-                    </div>
-                  )}
-
-                  {/* No Files Found */}
-                  {!isScanning && availableCSVs.length === 0 && (
-                    <div style={styles.noFilesMessage}>
-                      No CSV files found in public/ directory.
-                      <br />
-                      Place files there and rescan.
-                    </div>
-                  )}
-
-                  {/* Available Files */}
-                  {!isScanning && availableCSVs.length > 0 && (
-                    <>
-                      {availableCSVs.map((preset) => (
-                        <div
-                          key={preset.filename}
-                          style={styles.optionItem}
-                          onClick={() => handlePresetLoad(preset.filename)}
-                          onMouseEnter={(e) => {
-                            Object.assign(e.target.style, styles.optionItemHover);
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.backgroundColor = '';
-                          }}
-                        >
-                          <FileText size={16} color={themeStyles.text.muted} />
-                          <div style={styles.optionText}>
-                            <div style={styles.optionName}>{preset.name}</div>
-                            <div style={styles.optionDesc}>{preset.description}</div>
-                          </div>
-                          {isLoadingPreset && (
-                            <div style={{
-                              width: '12px',
-                              height: '12px',
-                              border: '2px solid #e5e7eb',
-                              borderTop: '2px solid #2563eb',
-                              borderRadius: '50%',
-                              animation: 'spin 1s linear infinite'
-                            }} />
-                          )}
-                        </div>
-                      ))}
-
-                      {/* Upload Custom File */}
-                      <div
-                        style={styles.uploadOptionItem}
-                        onClick={() => {
-                          fileInputRef.current?.click();
-                          setShowCSVOptions(false);
-                        }}
-                        onMouseEnter={(e) => {
-                          Object.assign(e.target.style, styles.optionItemHover);
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.backgroundColor = '';
-                        }}
-                      >
-                        <Upload size={16} />
-                        Upload Custom CSV
+                    <FileText size={16} />
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '500' }}>
+                        {preset.name}
                       </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+                      <div style={{ fontSize: '11px', color: themeStyles.text.secondary }}>
+                        {preset.description}
+                      </div>
+                    </div>
+                  </div>
+                ))}
 
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              style={{
-                ...styles.button,
-                ...styles.buttonPrimary
-              }}
-              title="Upload new CSV file"
-            >
-              <Upload size={14} />
-              Upload CSV
-            </button>
+                <div
+                  style={{
+                    ...styles.optionItem,
+                    color: '#2563eb',
+                    fontWeight: '500'
+                  }}
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setShowCSVOptions(false);
+                  }}
+                >
+                  <Upload size={16} />
+                  Upload Custom CSV
+                </div>
+              </div>
+            )}
           </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={(e) => e.target.files[0] && onNewCSV(e.target.files[0])}
-            style={{ display: 'none' }}
-          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              ...styles.button,
+              ...themeStyles.button.primary
+            }}
+          >
+            <Upload size={14} />
+            Upload
+          </button>
         </div>
       </div>
 
-      <style>
-        {`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}
-      </style>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv"
+        onChange={(e) => e.target.files[0] && onNewCSV(e.target.files[0])}
+        style={{ display: 'none' }}
+      />
     </div>
   );
 };

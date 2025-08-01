@@ -1,5 +1,7 @@
+// Updated PlayerList.jsx with Avoid Players feature
+
 import React from 'react';
-import { UserPlus, Eye, Sun, Moon, EyeOff, TrendingUp } from 'lucide-react';
+import { UserPlus, Eye, Sun, Moon, EyeOff, TrendingUp, X } from 'lucide-react';
 import { TeamVisual } from './TeamVisual';
 
 const PlayerList = ({
@@ -26,6 +28,13 @@ const PlayerList = ({
   setWatchHighlightColor,
   watchHighlightOpacity,
   setWatchHighlightOpacity,
+  avoidedPlayers,
+  toggleAvoidPlayer,
+  isPlayerAvoided,
+  avoidHighlightColor,
+  setAvoidHighlightColor,
+  avoidHighlightOpacity,
+  setAvoidHighlightOpacity,
   getTierColor,
   showAvailabilityPrediction,
   setShowAvailabilityPrediction,
@@ -145,6 +154,25 @@ const PlayerList = ({
     return allFlexPlayers.sort((a, b) => a.rank - b.rank);
   };
 
+  // Helper function to determine player row styling based on watch/avoid status
+  const getPlayerRowStyle = (baseStyle, isDrafted, isWatched, isAvoided) => {
+    let style = { ...baseStyle };
+
+    if (isDrafted) {
+      style.opacity = '0.5';
+    }
+
+    if (isWatched && !isDrafted) {
+      style.backgroundColor = `${watchHighlightColor}${Math.round((watchHighlightOpacity || 30) / 100 * 255).toString(16).padStart(2, '0')}`;
+      style.borderLeft = `4px solid ${watchHighlightColor}`;
+    } else if (isAvoided && !isDrafted) {
+      style.backgroundColor = `${avoidHighlightColor}${Math.round((avoidHighlightOpacity || 30) / 100 * 255).toString(16).padStart(2, '0')}`;
+      style.borderLeft = `4px solid ${avoidHighlightColor}`;
+    }
+
+    return style;
+  };
+
   const styles = {
     card: {
       ...themeStyles.card,
@@ -201,10 +229,6 @@ const PlayerList = ({
       borderBottom: `1px solid ${themeStyles.border}`,
       transition: 'background-color 0.2s',
       position: 'relative'
-    },
-    watchedPlayerRow: {
-      backgroundColor: `${watchHighlightColor}${Math.round((watchHighlightOpacity || 30) / 100 * 255).toString(16).padStart(2, '0')}`,
-      borderLeft: `4px solid ${watchHighlightColor}`
     },
     tierIndicator: {
       position: 'absolute',
@@ -313,6 +337,15 @@ const PlayerList = ({
       display: 'flex',
       alignItems: 'center'
     },
+    avoidButton: {
+      padding: '6px',
+      borderRadius: '4px',
+      border: 'none',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      display: 'flex',
+      alignItems: 'center'
+    },
     button: {
       display: 'flex',
       alignItems: 'center',
@@ -377,10 +410,6 @@ const PlayerList = ({
       borderBottom: `1px solid ${themeStyles.border}`,
       fontSize: '12px',
       position: 'relative'
-    },
-    compactWatchedRow: {
-      backgroundColor: `${watchHighlightColor}${Math.round((watchHighlightOpacity || 30) / 100 * 255).toString(16).padStart(2, '0')}`,
-      borderRight: `3px solid ${watchHighlightColor}`
     },
     compactTierIndicator: {
       position: 'absolute',
@@ -494,6 +523,14 @@ const PlayerList = ({
       backgroundColor: 'transparent',
       transition: 'all 0.2s'
     },
+    compactAvoidButton: {
+      padding: '2px',
+      border: 'none',
+      borderRadius: '3px',
+      cursor: 'pointer',
+      backgroundColor: 'transparent',
+      transition: 'all 0.2s'
+    },
     compactDraftButton: {
       padding: '4px 8px',
       fontSize: '11px',
@@ -561,16 +598,17 @@ const PlayerList = ({
                   const isDrafted = draftedPlayers.includes(player.id);
                   const isUndrafted = !isDrafted;
                   const isWatched = isPlayerWatched(player.id);
+                  const isAvoided = isPlayerAvoided(player.id);
 
                   return (
                     <div
                       key={player.id}
-                      style={{
-                        ...(isCondensedMode ? styles.compactPlayerRowCondensed : styles.compactPlayerRow),
-                        ...(isDrafted ? { opacity: '0.5' } : {}),
-                        ...(isWatched && !isDrafted ? styles.compactWatchedRow : {}),
-                        ...(isCondensedMode && isUndrafted ? { cursor: 'pointer' } : {})
-                      }}
+                      style={getPlayerRowStyle(
+                        isCondensedMode ? styles.compactPlayerRowCondensed : styles.compactPlayerRow,
+                        isDrafted,
+                        isWatched,
+                        isAvoided
+                      )}
                       onClick={isCondensedMode && isUndrafted ? () => draftPlayer(player.id) : undefined}
                       title={isCondensedMode && isUndrafted ? `Draft ${player.name}` : undefined}
                     >
@@ -615,6 +653,8 @@ const PlayerList = ({
                               marginBottom: isCondensedMode ? '0' : undefined
                             }}>
                               {player.name}
+                              {isWatched && <span style={{ marginLeft: '4px', fontSize: '10px' }}>👁️</span>}
+                              {isAvoided && <span style={{ marginLeft: '4px', fontSize: '10px' }}>🚫</span>}
                             </div>
 
                             {!isCondensedMode && (
@@ -710,6 +750,20 @@ const PlayerList = ({
                                 <Eye size={12} />
                               </button>
                               <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleAvoidPlayer(player.id);
+                                }}
+                                style={{
+                                  ...styles.compactAvoidButton,
+                                  backgroundColor: isAvoided ? avoidHighlightColor : 'transparent',
+                                  color: isAvoided ? '#ffffff' : themeStyles.text.muted
+                                }}
+                                title={isAvoided ? 'Remove from avoid list' : 'Add to avoid list'}
+                              >
+                                <X size={12} />
+                              </button>
+                              <button
                                 onClick={() => draftPlayer(player.id)}
                                 style={styles.compactDraftButton}
                               >
@@ -755,6 +809,7 @@ const PlayerList = ({
           const isDrafted = draftedPlayers.includes(player.id);
           const isUndrafted = !isDrafted;
           const isWatched = isPlayerWatched(player.id);
+          const isAvoided = isPlayerAvoided(player.id);
 
           // For FLEX tab, show overall rank since we're mixing positions
           const displayRank = (activeTab === 'overall' || activeTab === 'FLEX') ? player.rank : (player.positionRank || player.rank);
@@ -762,11 +817,12 @@ const PlayerList = ({
           return (
             <div
               key={player.id}
-              style={{
-                ...(isCondensedMode ? styles.playerRowCondensed : styles.playerRow),
-                ...(isDrafted ? { opacity: '0.5' } : {}),
-                ...(isWatched && !isDrafted ? styles.watchedPlayerRow : {})
-              }}
+              style={getPlayerRowStyle(
+                isCondensedMode ? styles.playerRowCondensed : styles.playerRow,
+                isDrafted,
+                isWatched,
+                isAvoided
+              )}
             >
               {/* Tier indicator */}
               {player.tier && (
@@ -796,6 +852,8 @@ const PlayerList = ({
                       marginBottom: isCondensedMode ? '0' : '4px'
                     }}>
                       {player.name}
+                      {isWatched && <span style={{ marginLeft: '8px', fontSize: '14px' }}>👁️</span>}
+                      {isAvoided && <span style={{ marginLeft: '8px', fontSize: '14px' }}>🚫</span>}
                     </div>
 
                     {!isCondensedMode && (
@@ -907,6 +965,20 @@ const PlayerList = ({
                     >
                       <Eye size={16} />
                     </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleAvoidPlayer(player.id);
+                      }}
+                      style={{
+                        ...styles.avoidButton,
+                        backgroundColor: isAvoided ? avoidHighlightColor : themeStyles.button.secondary.backgroundColor,
+                        color: isAvoided ? '#ffffff' : themeStyles.text.secondary
+                      }}
+                      title={isAvoided ? 'Remove from avoid list' : 'Add to avoid list'}
+                    >
+                      <X size={16} />
+                    </button>
                     {isCondensedMode ? (
                       <span
                         onClick={() => draftPlayer(player.id)}
@@ -994,7 +1066,7 @@ const PlayerList = ({
                 title="Show probability that players will be available on your next pick"
               >
                 <TrendingUp size={14} />
-                {showAvailabilityPrediction ? 'Hide' : 'Show'} Liklihood Player Will Be Available Next Pick
+                {showAvailabilityPrediction ? 'Hide' : 'Show'} Likelihood Player Will Be Available Next Pick
               </button>
 
               {showAvailabilityPrediction && (
@@ -1057,7 +1129,7 @@ const PlayerList = ({
               margin: '0 4px'
             }} />
 
-            {/* Watch Controls */}
+            {/* Watch & Avoid Controls */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{
                 fontSize: '12px',
@@ -1104,6 +1176,56 @@ const PlayerList = ({
                 textAlign: 'center'
               }}>
                 {watchHighlightOpacity || 30}%
+              </span>
+            </div>
+
+            {/* Avoid Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{
+                fontSize: '12px',
+                fontWeight: '500',
+                color: themeStyles.text.secondary,
+                whiteSpace: 'nowrap'
+              }}>
+                Avoid:
+              </span>
+              <input
+                type="color"
+                value={avoidHighlightColor}
+                onChange={(e) => setAvoidHighlightColor(e.target.value)}
+                style={{
+                  width: '20px',
+                  height: '20px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+                title="Avoid highlight color"
+              />
+              <input
+                type="range"
+                min="10"
+                max="80"
+                step="10"
+                value={avoidHighlightOpacity || 30}
+                onChange={(e) => setAvoidHighlightOpacity(parseInt(e.target.value))}
+                style={{
+                  width: '60px',
+                  height: '4px',
+                  borderRadius: '2px',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  background: `linear-gradient(90deg, ${avoidHighlightColor}30 0%, ${avoidHighlightColor}CC 100%)`
+                }}
+                title={`Avoid opacity: ${avoidHighlightOpacity || 30}%`}
+              />
+              <span style={{
+                fontSize: '10px',
+                color: themeStyles.text.muted,
+                minWidth: '25px',
+                textAlign: 'center'
+              }}>
+                {avoidHighlightOpacity || 30}%
               </span>
             </div>
 
