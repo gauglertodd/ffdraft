@@ -101,7 +101,16 @@ const PlayerList = ({
   };
 
   const getAvailabilityText = (probability) => {
-    return `${Math.round(probability * 100)}%`;
+    const percentage = Math.round(probability * 100);
+    if (percentage >= 90) return `${percentage}% (Safe)`;
+    if (percentage >= 70) return `${percentage}% (Likely)`;
+    if (percentage >= 50) return `${percentage}% (Risky)`;
+    return `${percentage}% (Danger)`;
+  };
+
+  const getAvailabilityTooltip = (probability, playerName) => {
+    const percentage = Math.round(probability * 100);
+    return `${percentage}% chance ${playerName} will still be available when it's your turn to pick`;
   };
 
   const getFilteredPlayersForPosition = (position) => {
@@ -627,11 +636,14 @@ const PlayerList = ({
                                   </span>
                                 )}
                                 {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
-                                  <span style={{
-                                    ...styles.compactAvailabilityBadge,
-                                    backgroundColor: getAvailabilityColor(availabilityPredictions[player.id])
-                                  }}>
-                                    {getAvailabilityText(availabilityPredictions[player.id])}
+                                  <span
+                                    style={{
+                                      ...styles.compactAvailabilityBadge,
+                                      backgroundColor: getAvailabilityColor(availabilityPredictions[player.id])
+                                    }}
+                                    title={getAvailabilityTooltip(availabilityPredictions[player.id], player.name)}
+                                  >
+                                    {Math.round(availabilityPredictions[player.id] * 100)}%
                                   </span>
                                 )}
                               </div>
@@ -660,14 +672,17 @@ const PlayerList = ({
                                 </span>
                               )}
                               {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
-                                <span style={{
-                                  ...styles.compactAvailabilityBadge,
-                                  backgroundColor: getAvailabilityColor(availabilityPredictions[player.id]),
-                                  fontSize: '8px',
-                                  padding: '2px 4px',
-                                  minWidth: 'fit-content'
-                                }}>
-                                  {getAvailabilityText(availabilityPredictions[player.id])}
+                                <span
+                                  style={{
+                                    ...styles.compactAvailabilityBadge,
+                                    backgroundColor: getAvailabilityColor(availabilityPredictions[player.id]),
+                                    fontSize: '8px',
+                                    padding: '2px 4px',
+                                    minWidth: 'fit-content'
+                                  }}
+                                  title={getAvailabilityTooltip(availabilityPredictions[player.id], player.name)}
+                                >
+                                  {Math.round(availabilityPredictions[player.id] * 100)}%
                                 </span>
                               )}
                             </div>
@@ -812,10 +827,13 @@ const PlayerList = ({
                           </span>
                         )}
                         {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
-                          <span style={{
-                            ...styles.availabilityBadge,
-                            backgroundColor: getAvailabilityColor(availabilityPredictions[player.id])
-                          }}>
+                          <span
+                            style={{
+                              ...styles.availabilityBadge,
+                              backgroundColor: getAvailabilityColor(availabilityPredictions[player.id])
+                            }}
+                            title={getAvailabilityTooltip(availabilityPredictions[player.id], player.name)}
+                          >
                             {getAvailabilityText(availabilityPredictions[player.id])}
                           </span>
                         )}
@@ -854,12 +872,15 @@ const PlayerList = ({
                         </span>
                       )}
                       {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
-                        <span style={{
-                          ...styles.availabilityBadge,
-                          backgroundColor: getAvailabilityColor(availabilityPredictions[player.id]),
-                          fontSize: '10px',
-                          padding: '3px 6px'
-                        }}>
+                        <span
+                          style={{
+                            ...styles.availabilityBadge,
+                            backgroundColor: getAvailabilityColor(availabilityPredictions[player.id]),
+                            fontSize: '10px',
+                            padding: '3px 6px'
+                          }}
+                          title={getAvailabilityTooltip(availabilityPredictions[player.id], player.name)}
+                        >
                           {getAvailabilityText(availabilityPredictions[player.id])}
                         </span>
                       )}
@@ -970,10 +991,10 @@ const PlayerList = ({
                   backgroundColor: showAvailabilityPrediction ? '#7c3aed' : themeStyles.button.secondary.backgroundColor,
                   color: showAvailabilityPrediction ? '#ffffff' : themeStyles.button.secondary.color
                 }}
-                title="Toggle availability predictions"
+                title="Show probability that players will be available on your next pick"
               >
                 <TrendingUp size={14} />
-                {showAvailabilityPrediction ? 'Hide' : 'Show'} Predictions
+                {showAvailabilityPrediction ? 'Hide' : 'Show'} Liklihood Player Will Be Available Next Pick
               </button>
 
               {showAvailabilityPrediction && (
@@ -989,7 +1010,7 @@ const PlayerList = ({
                       outline: 'none',
                       minWidth: '80px'
                     }}
-                    title="Number of simulation trials"
+                    title="Number of simulation trials for accuracy"
                   >
                     <option value={10}>10 trials</option>
                     <option value={100}>100 trials</option>
@@ -1014,9 +1035,9 @@ const PlayerList = ({
                       color: '#ffffff',
                       opacity: isPredicting ? 0.5 : 1
                     }}
-                    title="Run availability predictions"
+                    title="Calculate odds that players will still be available when it's your turn"
                   >
-                    {isPredicting ? 'Predicting...' : 'Predict'}
+                    {isPredicting ? 'Calculating...' : 'Calculate Odds'}
                   </button>
 
                   {lastPredictionTime && (

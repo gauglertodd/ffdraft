@@ -271,7 +271,6 @@ const UnifiedControlPanel = ({
     if (confirmed && onClearSavedState) {
       onClearSavedState();
       setLastSaveTime(null);
-      setShowSaveOptions(false);
     }
   };
 
@@ -783,7 +782,7 @@ const UnifiedControlPanel = ({
 
           <div style={styles.divider} />
 
-          {/* Save Controls */}
+          {/* Save and Clear Controls */}
           <div style={styles.controlGroup}>
             <div style={{ position: 'relative' }}>
               <button
@@ -792,7 +791,7 @@ const UnifiedControlPanel = ({
                   ...styles.button,
                   ...styles.buttonSuccess
                 }}
-                title="Save and restore options"
+                title="Save options"
               >
                 <Save size={14} />
                 Save
@@ -802,7 +801,7 @@ const UnifiedControlPanel = ({
               {showSaveOptions && (
                 <div style={styles.optionsDropdown}>
                   <div style={styles.optionHeader}>
-                    Draft Persistence
+                    Draft Save Options
                   </div>
 
                   <div
@@ -822,23 +821,6 @@ const UnifiedControlPanel = ({
                     </div>
                   </div>
 
-                  <div
-                    style={{...styles.optionItem, color: '#dc2626'}}
-                    onClick={handleClearSavedState}
-                    onMouseEnter={(e) => {
-                      Object.assign(e.target.style, styles.optionItemHover);
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.backgroundColor = '';
-                    }}
-                  >
-                    <Trash2 size={16} color="#dc2626" />
-                    <div style={styles.optionText}>
-                      <div style={{...styles.optionName, color: '#dc2626'}}>Clear Saved</div>
-                      <div style={styles.optionDesc}>Remove saved draft data</div>
-                    </div>
-                  </div>
-
                   <div style={styles.saveStatus}>
                     {lastSaveTime ?
                       `Last saved: ${new Date(lastSaveTime).toLocaleTimeString()}` :
@@ -848,6 +830,18 @@ const UnifiedControlPanel = ({
                 </div>
               )}
             </div>
+
+            <button
+              onClick={handleClearSavedState}
+              style={{
+                ...styles.button,
+                ...styles.buttonDanger
+              }}
+              title="Clear all saved draft data from browser storage"
+            >
+              <Trash2 size={14} />
+              Clear Saved
+            </button>
           </div>
 
           <div style={styles.divider} />

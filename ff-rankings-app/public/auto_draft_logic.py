@@ -223,8 +223,8 @@ def simulate_draft_until_my_turn(
 
         console.log(f"  Pick {pick}: Team {current_team_id} selecting...")
 
-        # Randomly select a strategy for this team
-        strategy_names = list(AVAILABLE_STRATEGIES.keys())
+        # Randomly select a strategy for this team (excluding manual)
+        strategy_names = [name for name in AVAILABLE_STRATEGIES.keys() if name != 'manual' and AVAILABLE_STRATEGIES[name] is not None]
         random_strategy_name = random.choice(strategy_names)
         strategy = AVAILABLE_STRATEGIES[random_strategy_name]
 
@@ -315,6 +315,9 @@ def auto_draft_player(available_players_json: str, team_roster_json: str, strate
 
         strategy_obj = AVAILABLE_STRATEGIES[strategy.lower()]
 
+        if strategy_obj is None:  # Manual strategy
+            return json.dumps({"error": "Manual strategy cannot be executed automatically"})
+
         # Execute strategy with variability
         if variability > 0.0:
             selected_player_id = execute_strategy_with_variability(
@@ -327,7 +330,8 @@ def auto_draft_player(available_players_json: str, team_roster_json: str, strate
             return json.dumps({
                 "player_id": None,
                 "player_name": None,
-                "reasoning": "No valid players available for selection"
+                "reasoning": "No valid players available for selection",
+                "strategy_used": strategy_obj.strategy_name
             })
 
         # Get selected player info
@@ -339,6 +343,17 @@ def auto_draft_player(available_players_json: str, team_roster_json: str, strate
 
         if not selected_player:
             return json.dumps({"error": "Selected player not found"})
+
+        # Debug logging for strategy behavior
+        team_picks = sum(1 for slot in team_roster.roster_slots if slot.is_filled)
+        console.log(f"🎯 {strategy_obj.strategy_name} (Team {team_roster.team_id}): Pick #{team_picks + 1} - Selected {selected_player['name']} ({selected_player['position']}, Rank #{selected_player['rank']})")
+
+        # Log current roster state for debugging
+        rb_count = team_roster.count_position(Position.RB)
+        wr_count = team_roster.count_position(Position.WR)
+        qb_count = team_roster.count_position(Position.QB)
+        te_count = team_roster.count_position(Position.TE)
+        console.log(f"    Roster before pick: QB:{qb_count}, RB:{rb_count}, WR:{wr_count}, TE:{te_count}")
 
         # Generate reasoning
         reasoning = f"{strategy_obj.strategy_name}: Selected {selected_player['name']} " \
@@ -355,7 +370,16 @@ def auto_draft_player(available_players_json: str, team_roster_json: str, strate
             "player_name": selected_player['name'],
             "reasoning": reasoning,
             "strategy_used": strategy_obj.strategy_name,
-            "variability_applied": variability
+            "variability_applied": variability,
+            "debug_info": {
+                "team_pick_number": team_picks + 1,
+                "roster_before": {
+                    "QB": qb_count,
+                    "RB": rb_count,
+                    "WR": wr_count,
+                    "TE": te_count
+                }
+            }
         })
 
     except Exception as e:
@@ -374,7 +398,7 @@ def predict_availability(
     team_variability_json: str = "{}"
 ) -> str:
     """
-    Predict availability of players for next pick
+    Predict availability of players for next pick using all available strategies
 
     Returns:
     JSON string with availability predictions
@@ -397,7 +421,7 @@ def predict_availability(
             player_taken_count[player['id']] = 0
 
         # Run simulation trials
-        console.log(f"Running {trials} simulation trials...")
+        console.log(f"Running {trials} simulation trials with all {len([s for s in AVAILABLE_STRATEGIES.keys() if s != 'manual'])} strategies...")
         for trial in range(trials):
             if trial % 20 == 0:  # Log every 20th trial
                 console.log(f"  Trial {trial + 1}/{trials}")
@@ -432,6 +456,7 @@ def predict_availability(
         return json.dumps({
             "availability_predictions": availability_predictions,
             "trials_completed": trials,
+            "strategies_used": len([s for s in AVAILABLE_STRATEGIES.keys() if s != 'manual']),
             "debug_info": {
                 "sample_player_counts": dict(list(player_taken_count.items())[:5]),
                 "total_players": len(player_taken_count),
@@ -448,14 +473,20 @@ def predict_availability(
 
 
 def get_available_strategies() -> str:
-    """Get list of available draft strategies"""
+    """Get list of available draft strategies with descriptions"""
     try:
         strategies = {}
         for name, strategy in AVAILABLE_STRATEGIES.items():
-            strategies[name] = {
-                "name": strategy.strategy_name,
-                "description": strategy.description
-            }
+            if strategy is not None:  # Skip manual
+                strategies[name] = {
+                    "name": strategy.strategy_name,
+                    "description": strategy.description
+                }
+            else:
+                strategies[name] = {
+                    "name": "Manual",
+                    "description": "Manual drafting - user selects players"
+                }
         return json.dumps(strategies)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -467,3 +498,5 @@ window.pyPredictAvailability = create_proxy(predict_availability)
 window.pyGetStrategies = create_proxy(get_available_strategies)
 
 console.log("🐍 PyScript auto-draft system loaded successfully!")
+console.log(f"📋 Available strategies: {', '.join([name for name in AVAILABLE_STRATEGIES.keys() if name != 'manual'])}")
+console.log(f"🎯 Total strategies loaded: {len([s for s in AVAILABLE_STRATEGIES.values() if s is not None])}")

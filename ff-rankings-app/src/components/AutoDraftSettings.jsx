@@ -29,6 +29,12 @@ const AutoDraftSettings = ({
     { value: 'positional', label: 'Positional Need', description: 'Draft based on roster needs' },
     { value: 'tier', label: 'Tier-Based', description: 'Draft best player in highest tier' },
     { value: 'balanced', label: 'Balanced', description: 'Mix of BPA and positional need' },
+    { value: 'wr_heavy', label: 'WR Heavy', description: 'Prioritize WR early and often' },
+    { value: 'rb_heavy', label: 'RB Heavy', description: 'Load up on RBs early' },
+    { value: 'hero_rb', label: 'Hero RB', description: 'Take elite RB early, then focus on WR/TE' },
+    { value: 'zero_rb', label: 'Zero RB', description: 'Wait on RB while focusing on WR/TE early' },
+    { value: 'late_qb', label: 'Late QB', description: 'Wait on QB until later rounds' },
+    { value: 'early_qb', label: 'Early QB', description: 'Secure elite QB early' },
     { value: 'aggressive', label: 'Aggressive', description: 'Target high-upside players early' },
     { value: 'conservative', label: 'Conservative', description: 'Prioritize safe, consistent players' }
   ];
@@ -278,7 +284,7 @@ const AutoDraftSettings = ({
     variabilitySection: {
       display: 'flex',
       alignItems: 'center',
-      gap: '8px',
+      gap: '6px',
       marginTop: '8px'
     },
     variabilitySlider: {
@@ -286,13 +292,16 @@ const AutoDraftSettings = ({
       height: '4px',
       borderRadius: '2px',
       outline: 'none',
-      cursor: 'pointer'
+      cursor: 'pointer',
+      minWidth: '60px',
+      maxWidth: '120px'
     },
     variabilityLabel: {
       fontSize: '11px',
       color: themeStyles.text.muted,
-      minWidth: '25px',
-      textAlign: 'center'
+      minWidth: '30px',
+      textAlign: 'right',
+      flexShrink: 0
     },
     advancedToggle: {
       display: 'flex',
@@ -318,6 +327,13 @@ const AutoDraftSettings = ({
       backgroundColor: themeStyles.card.backgroundColor,
       borderRadius: '6px',
       border: `1px solid ${themeStyles.border}`
+    },
+    strategyDescription: {
+      fontSize: '11px',
+      color: themeStyles.text.muted,
+      marginTop: '4px',
+      lineHeight: '1.3',
+      minHeight: '16px'
     }
   };
 
@@ -366,38 +382,52 @@ const AutoDraftSettings = ({
 
         <div style={styles.controlSection}>
           <button
-            onClick={() => setIsAutoDrafting(!isAutoDrafting)}
+            onClick={() => {
+              if (autoTeams === 0) {
+                alert('Configure at least one team for auto-draft before starting.');
+                return;
+              }
+              setIsAutoDrafting(true);
+              startDraftSequence();
+            }}
+            disabled={isDraftRunning || autoTeams === 0}
             style={{
               ...styles.button,
-              ...(isAutoDrafting ? styles.buttonSuccess : styles.buttonSecondary)
+              ...styles.buttonSuccess,
+              ...(isDraftRunning || autoTeams === 0 ? styles.buttonDisabled : {})
             }}
+            title={
+              autoTeams === 0
+                ? 'Configure at least one auto team first'
+                : isDraftRunning
+                  ? 'Draft sequence already running'
+                  : 'Start auto-draft sequence'
+            }
           >
-            {isAutoDrafting ? (
-              <>
-                <Pause size={16} />
-                Disable Auto-Draft
-              </>
-            ) : (
-              <>
-                <Play size={16} />
-                Enable Auto-Draft
-              </>
-            )}
+            <Play size={16} />
+            Start Auto-Draft
           </button>
 
-          {isAutoDrafting && autoTeams > 0 && (
-            <button
-              onClick={startDraftSequence}
-              disabled={isDraftRunning}
-              style={{
-                ...styles.button,
-                ...styles.buttonPrimary,
-                ...(isDraftRunning ? styles.buttonDisabled : {})
-              }}
-            >
-              {isDraftRunning ? 'Drafting...' : 'Start Sequence'}
-            </button>
-          )}
+          <button
+            onClick={() => {
+              setIsAutoDrafting(false);
+              // Note: This will stop the sequence at the next pick check
+            }}
+            disabled={!isDraftRunning}
+            style={{
+              ...styles.button,
+              ...styles.buttonWarning,
+              ...(!isDraftRunning ? styles.buttonDisabled : {})
+            }}
+            title={
+              !isDraftRunning
+                ? 'No draft sequence running'
+                : 'Pause auto-draft sequence'
+            }
+          >
+            <Pause size={16} />
+            Pause Auto-Draft
+          </button>
         </div>
       </div>
 
@@ -498,6 +528,7 @@ const AutoDraftSettings = ({
           const teamId = i + 1;
           const strategy = autoDraftSettings[teamId] || 'manual';
           const variability = (teamVariability[teamId] || 0.3) * 100;
+          const selectedStrategy = strategies.find(s => s.value === strategy);
 
           // Ensure we have a ref for this team
           if (!inputRefs.current[teamId]) {
@@ -534,6 +565,11 @@ const AutoDraftSettings = ({
                 ))}
               </select>
 
+              {/* Strategy Description */}
+              <div style={styles.strategyDescription}>
+                {selectedStrategy ? selectedStrategy.description : 'No strategy selected'}
+              </div>
+
               {showAdvancedSettings && strategy !== 'manual' && (
                 <div style={styles.variabilitySection}>
                   <span style={{ fontSize: '11px', color: themeStyles.text.muted }}>
@@ -562,7 +598,13 @@ const AutoDraftSettings = ({
       <div style={styles.helpText}>
         💡 <strong>Auto-Draft Tips:</strong> Enable auto-draft and set strategies for each team.
         Use "Start Sequence" to draft multiple picks automatically until reaching a manual team.
-        Higher variability makes AI decisions less predictable.
+        Higher variability makes AI decisions less predictable. New strategies include:
+        <br /><br />
+        <strong>Position-Based:</strong> WR Heavy, RB Heavy, Hero RB (elite RB + WR/TE), Zero RB (late RB focus)
+        <br />
+        <strong>QB Timing:</strong> Early QB (rounds 1-3), Late QB (round 8+)
+        <br />
+        <strong>Approach:</strong> Balanced (value + need), Tier-Based (draft by tiers)
       </div>
     </ComponentWrapper>
   );

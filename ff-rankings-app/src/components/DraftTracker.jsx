@@ -40,6 +40,10 @@ const DraftTrackerContent = () => {
   const [quickDraftQuery, setQuickDraftQuery] = useState('');
   const [selectedPlayerIndex, setSelectedPlayerIndex] = useState(0);
 
+  // Draft mode and user team selection
+  const [draftMode, setDraftMode] = useState('simulation'); // 'simulation' or 'live'
+  const [userTeam, setUserTeam] = useState(1);
+
   // Team variability settings (0.0 - 1.0)
   const [teamVariability, setTeamVariability] = useState({});
 
@@ -100,6 +104,8 @@ const DraftTrackerContent = () => {
         teamVariability: stateToSave.teamVariability || teamVariability,
         teamNames: stateToSave.teamNames || teamNames,
         draftStyle: stateToSave.draftStyle || draftStyle,
+        draftMode: stateToSave.draftMode || draftMode,
+        userTeam: stateToSave.userTeam || userTeam,
 
         // Player data and CSV info
         players: stateToSave.players || players,
@@ -174,6 +180,8 @@ const DraftTrackerContent = () => {
       if (savedState.teamVariability) setTeamVariability(savedState.teamVariability);
       if (savedState.teamNames) setTeamNames(savedState.teamNames);
       if (savedState.draftStyle) setDraftStyle(savedState.draftStyle);
+      if (savedState.draftMode) setDraftMode(savedState.draftMode);
+      if (savedState.userTeam) setUserTeam(savedState.userTeam);
       if (savedState.players) setPlayers(savedState.players);
       if (savedState.currentCSVSource) setCurrentCSVSource(savedState.currentCSVSource);
       if (savedState.watchHighlightColor) setWatchHighlightColor(savedState.watchHighlightColor);
@@ -242,7 +250,9 @@ const DraftTrackerContent = () => {
     draftStyle,
     players,
     currentCSVSource,
-    isDarkMode
+    isDarkMode,
+    draftMode,
+    userTeam
   ]);
 
   // Additional effect specifically for critical draft data
