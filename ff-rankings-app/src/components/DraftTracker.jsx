@@ -760,7 +760,9 @@ const DraftTrackerContent = () => {
                           player.position.toLowerCase().includes(searchLower);
 
       if (matchesSearch) {
-        if (!draftedPlayers.includes(player.id) && undraftedPlayers.length < 8) {
+          console.log(keepers);
+         const isTaken = draftedPlayers.includes(player.id) || keepers.some(k => k.playerId === player.id);
+        if (!isTaken && undraftedPlayers.length < 8) {
           undraftedPlayers.push(player);
         } else if (draftedPlayers.includes(player.id) && draftedMatchingPlayers.length < 8) {
           // Add draft info to player
@@ -1277,6 +1279,7 @@ const DraftTrackerContent = () => {
               draftStyle={draftStyle}
               themeStyles={themeStyles}
               getCurrentTeam={getCurrentTeam}
+              draftPlayer={draftPlayer}
             />
           )}
 

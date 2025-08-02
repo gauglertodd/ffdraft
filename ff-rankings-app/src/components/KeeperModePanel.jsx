@@ -11,7 +11,8 @@ const KeeperModePanel = ({
   teamNames,
   draftStyle,
   themeStyles,
-  getCurrentTeam
+  getCurrentTeam,
+  draftPlayer
 }) => {
   const [showAddKeeper, setShowAddKeeper] = useState(false);
   const [editingKeeper, setEditingKeeper] = useState(null);
@@ -67,7 +68,6 @@ const KeeperModePanel = ({
     if (!selectedPlayer) return;
 
     const pickNumber = getPickNumber(selectedTeam, selectedRound);
-
     const keeperData = {
       id: editingKeeper ? editingKeeper.id : Date.now(),
       playerId: selectedPlayer.id,
@@ -81,6 +81,7 @@ const KeeperModePanel = ({
       pickNumber: pickNumber
     };
 
+    draftPlayer(selectedPlayer.id);
     if (editingKeeper) {
       setKeepers(prev => prev.map(k => k.id === editingKeeper.id ? keeperData : k));
     } else {
