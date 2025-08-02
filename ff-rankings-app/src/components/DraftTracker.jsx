@@ -155,6 +155,7 @@ const DraftTrackerContent = () => {
     const savedState = loadDraftState();
     if (savedState?.players?.length > 0) {
       // Restore state with explicit setters
+      if (savedState.players !== undefined) setPlayers(savedState.players);
       if (savedState.draftedPlayers !== undefined) setDraftedPlayers(savedState.draftedPlayers);
       if (savedState.currentDraftPick !== undefined) setCurrentDraftPick(savedState.currentDraftPick);
       if (savedState.watchedPlayers !== undefined) setWatchedPlayers(savedState.watchedPlayers);
