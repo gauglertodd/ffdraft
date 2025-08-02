@@ -88,7 +88,6 @@ const KeeperModePanel = ({
     }
 
     // Reset form
-    setShowAddKeeper(false);
     setEditingKeeper(null);
     setSelectedPlayer(null);
     setSearchQuery('');
