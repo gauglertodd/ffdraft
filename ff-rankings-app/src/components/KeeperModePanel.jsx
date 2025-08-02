@@ -24,7 +24,10 @@ const KeeperModePanel = ({
   // Filter available players for keeper selection
   const availablePlayersForKeepers = useMemo(() => {
     const keeperPlayerIds = keepers.map(k => k.playerId);
-    return players.filter(p => !keeperPlayerIds.includes(p.id));
+    return players.filter(p =>
+      !keeperPlayerIds.includes(p.id) &&
+      (p.status === 'available' || p.status === 'drafted')
+    );
   }, [players, keepers]);
 
   // Search filtered players
@@ -58,11 +61,6 @@ const KeeperModePanel = ({
     }
   };
 
-  // Get team that picks at a specific pick number
-  const getTeamAtPick = (pickNumber) => {
-    return getCurrentTeam(pickNumber);
-  };
-
   // Add or update keeper
   const handleSaveKeeper = () => {
     if (!selectedPlayer) return;
@@ -81,24 +79,34 @@ const KeeperModePanel = ({
       pickNumber: pickNumber
     };
 
-    draftPlayer(selectedPlayer.id);
+    // Create the updated keepers array
+    let updatedKeepers;
     if (editingKeeper) {
-      setKeepers(prev => prev.map(k => k.id === editingKeeper.id ? keeperData : k));
+      updatedKeepers = keepers.map(k => k.id === editingKeeper.id ? keeperData : k);
     } else {
-      setKeepers(prev => [...prev, keeperData]);
+      updatedKeepers = [...keepers, keeperData];
     }
 
-    // Reset form
-    setEditingKeeper(null);
-    setSelectedPlayer(null);
-    setSearchQuery('');
-    setSelectedTeam(1);
-    setSelectedRound(1);
+    // Call setKeepers with the final array (not a function)
+    setKeepers(updatedKeepers);
+
+    if (editingKeeper) {
+      // If editing, close the modal completely
+      handleCancel();
+    } else {
+      // If adding new keeper, just reset the form but keep modal open
+      setSelectedPlayer(null);
+      setSearchQuery('');
+      // Don't reset team/round to make adding multiple keepers easier
+      // setSelectedTeam(1);
+      // setSelectedRound(1);
+    }
   };
 
   // Delete keeper
   const handleDeleteKeeper = (keeperId) => {
-    setKeepers(prev => prev.filter(k => k.id !== keeperId));
+    const updatedKeepers = keepers.filter(k => k.id !== keeperId);
+    setKeepers(updatedKeepers);
   };
 
   // Start editing keeper
@@ -116,12 +124,12 @@ const KeeperModePanel = ({
     setShowAddKeeper(true);
   };
 
-  // Cancel add/edit
+  // Cancel add/edit - UPDATED to reset search
   const handleCancel = () => {
     setShowAddKeeper(false);
     setEditingKeeper(null);
     setSelectedPlayer(null);
-    setSearchQuery('');
+    setSearchQuery(''); // Reset search query
     setSelectedTeam(1);
     setSelectedRound(1);
   };
@@ -578,6 +586,16 @@ const KeeperModePanel = ({
                         >
                           <div style={{ fontWeight: '500', marginBottom: '4px' }}>
                             {player.name}
+                            {player.status === 'drafted' && (
+                              <span style={{
+                                marginLeft: '8px',
+                                fontSize: '10px',
+                                color: '#dc2626',
+                                fontWeight: '600'
+                              }}>
+                                DRAFTED
+                              </span>
+                            )}
                           </div>
                           <div style={{ fontSize: '12px', color: themeStyles.text.secondary }}>
                             {player.position} • {player.team} • #{player.rank}

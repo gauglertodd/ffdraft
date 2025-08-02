@@ -1,4 +1,4 @@
-// Updated PlayerList.jsx with Avoid Players feature
+// Updated PlayerList.jsx with proper keeper and unified state support
 
 import React from 'react';
 import { UserPlus, Eye, Sun, Moon, EyeOff, TrendingUp, X } from 'lucide-react';
@@ -43,45 +43,41 @@ const PlayerList = ({
   onPredictAvailability,
   isPredicting,
   lastPredictionTime,
-  availabilityPredictions
+  availabilityPredictions,
+  // NEW: Access to unified player state
+  players
 }) => {
   const [isCondensedMode, setIsCondensedMode] = React.useState(false);
 
+  // Helper function to check if player is drafted/keeper using unified state
+  const getPlayerStatus = (playerId) => {
+    return players?.[playerId]?.status || 'available';
+  };
+
+  // Helper function to check if player is keeper
+  const isPlayerKeeper = (playerId) => {
+    return getPlayerStatus(playerId) === 'keeper';
+  };
+
+  // Helper function to check if player is drafted (includes keepers)
+  const isPlayerDrafted = (playerId) => {
+    const status = getPlayerStatus(playerId);
+    return status === 'drafted' || status === 'keeper';
+  };
+
   // Generate tabs based on actual positions found in the data
   const getMainPositionTabs = () => {
-    // All possible main positions we want to show as tabs
     const possiblePositions = ['QB', 'RB', 'WR', 'TE', 'DST', 'K'];
-
-    // Debug: Log what positions we have
-    console.log('🔍 PlayerList positions array:', positions);
-    console.log('🔍 Checking for each position:');
-
-    // Filter to only include positions that actually exist in the data
-    // Note: positions array includes 'ALL' as first element, so we need to check the rest
-    const actualPositions = possiblePositions.filter(pos => {
-      const hasPosition = positions.includes(pos);
-      console.log(`  ${pos}: ${hasPosition ? '✅ found' : '❌ missing'}`);
-      return hasPosition;
-    });
-
-    console.log('📋 Final position tabs to show:', actualPositions);
-
-    // Check if we have the flex-eligible positions
+    const actualPositions = possiblePositions.filter(pos => positions.includes(pos));
     const hasFlexPositions = ['RB', 'WR', 'TE'].some(pos => positions.includes(pos));
 
-    // Always include overall, then the actual positions, then FLEX (if applicable), then skill positions combo
     const tabs = ['overall', ...actualPositions];
-
     if (hasFlexPositions) {
       tabs.push('FLEX');
     }
-
     tabs.push('skill-positions');
 
-    const finalTabs = tabs;
-    console.log('🎯 Complete tab list:', finalTabs);
-
-    return finalTabs;
+    return tabs;
   };
 
   const getTabLabel = (tab) => {
@@ -103,10 +99,10 @@ const PlayerList = ({
 
   // Availability prediction helper functions
   const getAvailabilityColor = (probability) => {
-    if (probability >= 0.8) return '#16a34a'; // Green - very likely available
-    if (probability >= 0.6) return '#ca8a04'; // Yellow - moderately likely
-    if (probability >= 0.4) return '#ea580c'; // Orange - less likely
-    return '#dc2626'; // Red - unlikely to be available
+    if (probability >= 0.8) return '#16a34a';
+    if (probability >= 0.6) return '#ca8a04';
+    if (probability >= 0.4) return '#ea580c';
+    return '#dc2626';
   };
 
   const getAvailabilityText = (probability) => {
@@ -128,7 +124,11 @@ const PlayerList = ({
       const matchesSearch = searchQuery === '' ||
         player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         player.team.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesDrafted = showDrafted || !draftedPlayers.includes(player.id);
+
+      // Use unified state to check if player is drafted/keeper
+      const isDrafted = isPlayerDrafted(player.id);
+      const matchesDrafted = showDrafted || !isDrafted;
+
       return matchesSearch && matchesDrafted;
     });
   };
@@ -144,19 +144,23 @@ const PlayerList = ({
         const matchesSearch = searchQuery === '' ||
           player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           player.team.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesDrafted = showDrafted || !draftedPlayers.includes(player.id);
+
+        // Use unified state to check if player is drafted/keeper
+        const isDrafted = isPlayerDrafted(player.id);
+        const matchesDrafted = showDrafted || !isDrafted;
+
         return matchesSearch && matchesDrafted;
       });
       allFlexPlayers = [...allFlexPlayers, ...filteredPosPlayers];
     });
 
-    // Sort by overall rank to maintain proper FLEX ranking
     return allFlexPlayers.sort((a, b) => a.rank - b.rank);
   };
 
   // Helper function to determine player row styling based on watch/avoid status
-  const getPlayerRowStyle = (baseStyle, isDrafted, isWatched, isAvoided) => {
+  const getPlayerRowStyle = (baseStyle, playerId, isWatched, isAvoided) => {
     let style = { ...baseStyle };
+    const isDrafted = isPlayerDrafted(playerId);
 
     if (isDrafted) {
       style.opacity = '0.5';
@@ -290,6 +294,11 @@ const PlayerList = ({
       textDecoration: 'line-through',
       color: themeStyles.text.secondary
     },
+    playerNameKeeper: {
+      textDecoration: 'line-through',
+      color: '#7c3aed',
+      fontWeight: '600'
+    },
     playerMeta: {
       fontSize: '14px',
       color: themeStyles.text.secondary,
@@ -312,6 +321,15 @@ const PlayerList = ({
       fontSize: '11px',
       fontWeight: '600',
       color: '#ffffff'
+    },
+    keeperBadge: {
+      padding: '2px 6px',
+      borderRadius: '4px',
+      fontSize: '11px',
+      fontWeight: '600',
+      backgroundColor: '#7c3aed',
+      color: '#ffffff',
+      marginLeft: '8px'
     },
     availabilityBadge: {
       padding: '2px 6px',
@@ -366,186 +384,18 @@ const PlayerList = ({
       color: themeStyles.text.secondary,
       fontWeight: '500'
     },
+    keeperLabel: {
+      fontSize: '14px',
+      color: '#7c3aed',
+      fontWeight: '600',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px'
+    },
     emptyState: {
       padding: '32px',
       textAlign: 'center',
       color: themeStyles.text.muted
-    },
-    positionGrid: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-      gap: '16px',
-      padding: '16px'
-    },
-    positionColumn: {
-      ...themeStyles.positionColumn,
-      borderRadius: '8px'
-    },
-    positionHeader: {
-      padding: '12px 16px',
-      borderBottom: `1px solid ${themeStyles.border}`,
-      fontWeight: '600',
-      fontSize: '16px',
-      color: '#ffffff',
-      textAlign: 'center'
-    },
-    positionPlayersList: {
-      maxHeight: '600px',
-      overflowY: 'auto'
-    },
-    compactPlayerRow: {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '8px 12px',
-      borderBottom: `1px solid ${themeStyles.border}`,
-      fontSize: '13px',
-      position: 'relative'
-    },
-    compactPlayerRowCondensed: {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '4px 12px',
-      borderBottom: `1px solid ${themeStyles.border}`,
-      fontSize: '12px',
-      position: 'relative'
-    },
-    compactTierIndicator: {
-      position: 'absolute',
-      left: '0',
-      top: '0',
-      bottom: '0',
-      width: '3px'
-    },
-    compactPlayerVisuals: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px'
-    },
-    compactRankBadge: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      width: '24px',
-      height: '24px',
-      backgroundColor: '#f3f4f6',
-      color: '#1f2937',
-      fontSize: '11px',
-      fontWeight: '600',
-      borderRadius: '50%'
-    },
-    compactPlayerInfo: {
-      flex: '1',
-      minWidth: '0'
-    },
-    compactPlayerInfoCondensed: {
-      flex: '1',
-      minWidth: '0',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between'
-    },
-    compactPlayerNameSection: {
-      display: 'flex',
-      flexDirection: 'column'
-    },
-    compactPlayerNameSectionCondensed: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      flex: '1',
-      minWidth: '0',
-      overflow: 'hidden'
-    },
-    compactPlayerName: {
-      fontWeight: '500',
-      color: themeStyles.text.primary,
-      whiteSpace: 'nowrap',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis'
-    },
-    compactPlayerNameCondensed: {
-      fontWeight: '500',
-      color: themeStyles.text.primary,
-      whiteSpace: 'nowrap',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      maxWidth: '120px',
-      fontSize: '11px'
-    },
-    compactPlayerNameDrafted: {
-      textDecoration: 'line-through',
-      color: themeStyles.text.secondary
-    },
-    compactPlayerMeta: {
-      fontSize: '11px',
-      color: themeStyles.text.secondary,
-      display: 'flex',
-      alignItems: 'center',
-      gap: '4px',
-      marginTop: '2px'
-    },
-    compactPlayerMetaCondensed: {
-      fontSize: '10px',
-      color: themeStyles.text.secondary,
-      display: 'flex',
-      alignItems: 'center',
-      gap: '3px'
-    },
-    compactTierBadge: {
-      padding: '1px 4px',
-      borderRadius: '3px',
-      fontSize: '9px',
-      fontWeight: '600',
-      color: '#ffffff'
-    },
-    compactAvailabilityBadge: {
-      padding: '1px 4px',
-      borderRadius: '3px',
-      fontSize: '8px',
-      fontWeight: '600',
-      color: '#ffffff',
-      minWidth: '24px',
-      textAlign: 'center'
-    },
-    compactActions: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '4px',
-      minWidth: 'fit-content'
-    },
-    compactWatchButton: {
-      padding: '2px',
-      border: 'none',
-      borderRadius: '3px',
-      cursor: 'pointer',
-      backgroundColor: 'transparent',
-      transition: 'all 0.2s'
-    },
-    compactAvoidButton: {
-      padding: '2px',
-      border: 'none',
-      borderRadius: '3px',
-      cursor: 'pointer',
-      backgroundColor: 'transparent',
-      transition: 'all 0.2s'
-    },
-    compactDraftButton: {
-      padding: '4px 8px',
-      fontSize: '11px',
-      borderRadius: '4px',
-      backgroundColor: '#16a34a',
-      color: '#ffffff',
-      border: 'none',
-      cursor: 'pointer',
-      fontWeight: '500',
-      minWidth: 'fit-content'
-    },
-    compactDraftedLabel: {
-      fontSize: '11px',
-      color: themeStyles.text.secondary,
-      fontWeight: '500'
     },
     toggleSwitch: {
       display: 'flex',
@@ -581,21 +431,38 @@ const PlayerList = ({
     const positionsToShow = tabPositions.filter(pos => positions.includes(pos));
 
     return (
-      <div style={styles.positionGrid}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: '16px',
+        padding: '16px'
+      }}>
         {positionsToShow.map(position => {
           const positionPlayers = getFilteredPlayersForPosition(position);
 
           return (
-            <div key={position} style={styles.positionColumn}>
+            <div key={position} style={{
+              ...themeStyles.positionColumn,
+              borderRadius: '8px'
+            }}>
               <div style={{
-                ...styles.positionHeader,
+                padding: '12px 16px',
+                borderBottom: `1px solid ${themeStyles.border}`,
+                fontWeight: '600',
+                fontSize: '16px',
+                color: '#ffffff',
+                textAlign: 'center',
                 backgroundColor: positionColors[position] || '#6b7280'
               }}>
                 {position} ({positionPlayers.length})
               </div>
-              <div style={styles.positionPlayersList}>
+              <div style={{
+                maxHeight: '600px',
+                overflowY: 'auto'
+              }}>
                 {positionPlayers.map((player) => {
-                  const isDrafted = draftedPlayers.includes(player.id);
+                  const isDrafted = isPlayerDrafted(player.id);
+                  const isKeeper = isPlayerKeeper(player.id);
                   const isUndrafted = !isDrafted;
                   const isWatched = isPlayerWatched(player.id);
                   const isAvoided = isPlayerAvoided(player.id);
@@ -604,8 +471,24 @@ const PlayerList = ({
                     <div
                       key={player.id}
                       style={getPlayerRowStyle(
-                        isCondensedMode ? styles.compactPlayerRowCondensed : styles.compactPlayerRow,
-                        isDrafted,
+                        isCondensedMode ? {
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '4px 12px',
+                          borderBottom: `1px solid ${themeStyles.border}`,
+                          fontSize: '12px',
+                          position: 'relative'
+                        } : {
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          borderBottom: `1px solid ${themeStyles.border}`,
+                          fontSize: '13px',
+                          position: 'relative'
+                        },
+                        player.id,
                         isWatched,
                         isAvoided
                       )}
@@ -616,7 +499,11 @@ const PlayerList = ({
                       {player.tier && (
                         <div
                           style={{
-                            ...styles.compactTierIndicator,
+                            position: 'absolute',
+                            left: '0',
+                            top: '0',
+                            bottom: '0',
+                            width: '3px',
                             backgroundColor: getTierColor(player.tier)
                           }}
                         />
@@ -631,34 +518,74 @@ const PlayerList = ({
                         gap: '6px',
                         paddingLeft: player.tier ? '8px' : '0'
                       }}>
-                        <div style={styles.compactPlayerVisuals}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
                           <span style={{
-                            ...styles.compactRankBadge,
-                            ...(isCondensedMode ? {
-                              width: '20px',
-                              height: '20px',
-                              fontSize: '9px',
-                              minWidth: '20px'
-                            } : {})
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: isCondensedMode ? '20px' : '24px',
+                            height: isCondensedMode ? '20px' : '24px',
+                            backgroundColor: '#f3f4f6',
+                            color: '#1f2937',
+                            fontSize: isCondensedMode ? '9px' : '11px',
+                            fontWeight: '600',
+                            borderRadius: '50%',
+                            minWidth: isCondensedMode ? '20px' : '24px'
                           }}>
                             {player.positionRank || player.rank}
                           </span>
                         </div>
 
-                        <div style={isCondensedMode ? styles.compactPlayerInfoCondensed : styles.compactPlayerInfo}>
-                          <div style={isCondensedMode ? styles.compactPlayerNameSectionCondensed : styles.compactPlayerNameSection}>
+                        <div style={isCondensedMode ? {
+                          flex: '1',
+                          minWidth: '0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        } : {
+                          flex: '1'
+                        }}>
+                          <div style={isCondensedMode ? {
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            flex: '1',
+                            minWidth: '0',
+                            overflow: 'hidden'
+                          } : {
+                            display: 'flex',
+                            flexDirection: 'column'
+                          }}>
                             <div style={{
-                              ...(isCondensedMode ? styles.compactPlayerNameCondensed : styles.compactPlayerName),
-                              ...(isDrafted ? styles.compactPlayerNameDrafted : {}),
-                              marginBottom: isCondensedMode ? '0' : undefined
+                              fontWeight: '500',
+                              color: themeStyles.text.primary,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: isCondensedMode ? '120px' : 'none',
+                              fontSize: isCondensedMode ? '11px' : '13px',
+                              marginBottom: isCondensedMode ? '0' : '2px',
+                              ...(isDrafted ? (isKeeper ? styles.playerNameKeeper : styles.playerNameDrafted) : {})
                             }}>
                               {player.name}
                               {isWatched && <span style={{ marginLeft: '4px', fontSize: '10px' }}>👁️</span>}
                               {isAvoided && <span style={{ marginLeft: '4px', fontSize: '10px' }}>🚫</span>}
+                              {isKeeper && <span style={{ marginLeft: '4px', fontSize: '10px' }}>👑</span>}
                             </div>
 
                             {!isCondensedMode && (
-                              <div style={styles.compactPlayerMeta}>
+                              <div style={{
+                                fontSize: '11px',
+                                color: themeStyles.text.secondary,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                marginTop: '2px'
+                              }}>
                                 <TeamVisual
                                   teamAbbr={player.team}
                                   size="small"
@@ -669,7 +596,11 @@ const PlayerList = ({
                                 </span>
                                 {player.tier && (
                                   <span style={{
-                                    ...styles.compactTierBadge,
+                                    padding: '1px 4px',
+                                    borderRadius: '3px',
+                                    fontSize: '9px',
+                                    fontWeight: '600',
+                                    color: '#ffffff',
                                     backgroundColor: getTierColor(player.tier)
                                   }}>
                                     T{player.tier}
@@ -678,7 +609,13 @@ const PlayerList = ({
                                 {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
                                   <span
                                     style={{
-                                      ...styles.compactAvailabilityBadge,
+                                      padding: '1px 4px',
+                                      borderRadius: '3px',
+                                      fontSize: '8px',
+                                      fontWeight: '600',
+                                      color: '#ffffff',
+                                      minWidth: '24px',
+                                      textAlign: 'center',
                                       backgroundColor: getAvailabilityColor(availabilityPredictions[player.id])
                                     }}
                                     title={getAvailabilityTooltip(availabilityPredictions[player.id], player.name)}
@@ -691,7 +628,13 @@ const PlayerList = ({
                           </div>
 
                           {isCondensedMode && (
-                            <div style={styles.compactPlayerMetaCondensed}>
+                            <div style={{
+                              fontSize: '10px',
+                              color: themeStyles.text.secondary,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}>
                               <TeamVisual
                                 teamAbbr={player.team}
                                 size="small"
@@ -702,10 +645,12 @@ const PlayerList = ({
                               </span>
                               {player.tier && (
                                 <span style={{
-                                  ...styles.compactTierBadge,
-                                  backgroundColor: getTierColor(player.tier),
-                                  fontSize: '8px',
                                   padding: '3px 6px',
+                                  borderRadius: '3px',
+                                  fontSize: '8px',
+                                  fontWeight: '600',
+                                  color: '#ffffff',
+                                  backgroundColor: getTierColor(player.tier),
                                   minWidth: 'fit-content'
                                 }}>
                                   T{player.tier}
@@ -714,10 +659,12 @@ const PlayerList = ({
                               {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
                                 <span
                                   style={{
-                                    ...styles.compactAvailabilityBadge,
-                                    backgroundColor: getAvailabilityColor(availabilityPredictions[player.id]),
-                                    fontSize: '8px',
                                     padding: '2px 4px',
+                                    borderRadius: '3px',
+                                    fontSize: '8px',
+                                    fontWeight: '600',
+                                    color: '#ffffff',
+                                    backgroundColor: getAvailabilityColor(availabilityPredictions[player.id]),
                                     minWidth: 'fit-content'
                                   }}
                                   title={getAvailabilityTooltip(availabilityPredictions[player.id], player.name)}
@@ -732,7 +679,12 @@ const PlayerList = ({
 
                       {/* Action buttons - only show in normal mode */}
                       {!isCondensedMode && (
-                        <div style={styles.compactActions}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          minWidth: 'fit-content'
+                        }}>
                           {isUndrafted && (
                             <>
                               <button
@@ -741,9 +693,13 @@ const PlayerList = ({
                                   toggleWatchPlayer(player.id);
                                 }}
                                 style={{
-                                  ...styles.compactWatchButton,
+                                  padding: '2px',
+                                  border: 'none',
+                                  borderRadius: '3px',
+                                  cursor: 'pointer',
                                   backgroundColor: isWatched ? watchHighlightColor : 'transparent',
-                                  color: isWatched ? '#ffffff' : themeStyles.text.muted
+                                  color: isWatched ? '#ffffff' : themeStyles.text.muted,
+                                  transition: 'all 0.2s'
                                 }}
                                 title={isWatched ? 'Remove from watch list' : 'Add to watch list'}
                               >
@@ -755,9 +711,13 @@ const PlayerList = ({
                                   toggleAvoidPlayer(player.id);
                                 }}
                                 style={{
-                                  ...styles.compactAvoidButton,
+                                  padding: '2px',
+                                  border: 'none',
+                                  borderRadius: '3px',
+                                  cursor: 'pointer',
                                   backgroundColor: isAvoided ? avoidHighlightColor : 'transparent',
-                                  color: isAvoided ? '#ffffff' : themeStyles.text.muted
+                                  color: isAvoided ? '#ffffff' : themeStyles.text.muted,
+                                  transition: 'all 0.2s'
                                 }}
                                 title={isAvoided ? 'Remove from avoid list' : 'Add to avoid list'}
                               >
@@ -765,15 +725,44 @@ const PlayerList = ({
                               </button>
                               <button
                                 onClick={() => draftPlayer(player.id)}
-                                style={styles.compactDraftButton}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#16a34a',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontWeight: '500',
+                                  minWidth: 'fit-content'
+                                }}
                               >
                                 Draft
                               </button>
                             </>
                           )}
 
-                          {isDrafted && (
-                            <span style={styles.compactDraftedLabel}>✓</span>
+                          {isDrafted && !isKeeper && (
+                            <span style={{
+                              fontSize: '11px',
+                              color: themeStyles.text.secondary,
+                              fontWeight: '500'
+                            }}>
+                              ✓
+                            </span>
+                          )}
+
+                          {isKeeper && (
+                            <span style={{
+                              fontSize: '11px',
+                              color: '#7c3aed',
+                              fontWeight: '600',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}>
+                              👑 KEEPER
+                            </span>
                           )}
                         </div>
                       )}
@@ -806,7 +795,8 @@ const PlayerList = ({
     return (
       <div style={styles.playersList}>
         {playersToShow.map((player) => {
-          const isDrafted = draftedPlayers.includes(player.id);
+          const isDrafted = isPlayerDrafted(player.id);
+          const isKeeper = isPlayerKeeper(player.id);
           const isUndrafted = !isDrafted;
           const isWatched = isPlayerWatched(player.id);
           const isAvoided = isPlayerAvoided(player.id);
@@ -819,7 +809,7 @@ const PlayerList = ({
               key={player.id}
               style={getPlayerRowStyle(
                 isCondensedMode ? styles.playerRowCondensed : styles.playerRow,
-                isDrafted,
+                player.id,
                 isWatched,
                 isAvoided
               )}
@@ -848,12 +838,13 @@ const PlayerList = ({
                   <div style={isCondensedMode ? styles.playerNameSectionCondensed : styles.playerNameSection}>
                     <div style={{
                       ...styles.playerName,
-                      ...(isDrafted ? styles.playerNameDrafted : {}),
+                      ...(isDrafted ? (isKeeper ? styles.playerNameKeeper : styles.playerNameDrafted) : {}),
                       marginBottom: isCondensedMode ? '0' : '4px'
                     }}>
                       {player.name}
                       {isWatched && <span style={{ marginLeft: '8px', fontSize: '14px' }}>👁️</span>}
                       {isAvoided && <span style={{ marginLeft: '8px', fontSize: '14px' }}>🚫</span>}
+                      {isKeeper && <span style={{ marginLeft: '8px', fontSize: '14px' }}>👑</span>}
                     </div>
 
                     {!isCondensedMode && (
@@ -882,6 +873,11 @@ const PlayerList = ({
                             marginLeft: '8px'
                           }}>
                             Tier {player.tier}
+                          </span>
+                        )}
+                        {isKeeper && (
+                          <span style={styles.keeperBadge}>
+                            👑 KEEPER
                           </span>
                         )}
                         {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
@@ -927,6 +923,15 @@ const PlayerList = ({
                           padding: '4px 8px'
                         }}>
                           T{player.tier}
+                        </span>
+                      )}
+                      {isKeeper && (
+                        <span style={{
+                          ...styles.keeperBadge,
+                          fontSize: '10px',
+                          padding: '4px 8px'
+                        }}>
+                          👑
                         </span>
                       )}
                       {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
@@ -1016,8 +1021,14 @@ const PlayerList = ({
                   </>
                 )}
 
-                {isDrafted && (
+                {isDrafted && !isKeeper && (
                   <span style={styles.draftedLabel}>DRAFTED</span>
+                )}
+
+                {isKeeper && (
+                  <span style={styles.keeperLabel}>
+                    👑 KEEPER
+                  </span>
                 )}
               </div>
             </div>
@@ -1328,7 +1339,7 @@ const PlayerList = ({
             })}
           </div>
 
-          {/* Condensed mode toggle - now inline with tabs */}
+          {/* Condensed mode toggle */}
           <div style={styles.toggleSwitch}>
             <span>Condensed</span>
             <div

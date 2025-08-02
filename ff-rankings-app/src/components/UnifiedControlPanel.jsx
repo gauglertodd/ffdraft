@@ -27,14 +27,17 @@ const UnifiedControlPanel = ({
   // Keeper mode props
   isKeeperMode,
   setIsKeeperMode,
-  keepers
+  keepers,
+  // Team info for draft display
+  teamNames,
+  numTeams
 }) => {
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [filteredPlayers, setFilteredPlayers] = useState([]);
+  const [filteredPlayers, setFilteredPlayers] = useState({ available: [], drafted: [] });
   const [showCSVOptions, setShowCSVOptions] = useState(false);
   const [availableCSVs, setAvailableCSVs] = useState([]);
   const [isLoadingPreset, setIsLoadingPreset] = useState(false);
@@ -47,26 +50,61 @@ const UnifiedControlPanel = ({
     'Yahoo ADP.csv'
   ];
 
-  // Filter players for search dropdown
+  // Helper function to get team that drafted at a specific pick
+  const getCurrentTeam = (pickNumber) => {
+    const round = Math.floor((pickNumber - 1) / numTeams);
+    const position = (pickNumber - 1) % numTeams;
+    return round % 2 === 0 ? position + 1 : numTeams - position;
+  };
+
+  // Filter players for search dropdown - UPDATED to include drafted players
   useEffect(() => {
     if (searchQuery.length >= 2) {
       const searchLower = searchQuery.toLowerCase();
-      const matches = players
-        .filter(player => {
-          const matchesSearch = player.name.toLowerCase().includes(searchLower) ||
-                              player.team.toLowerCase().includes(searchLower);
-          return matchesSearch && !draftedPlayers.includes(player.id);
-        })
-        .slice(0, 8); // Increased to show more results
 
-      setFilteredPlayers(matches);
-      setIsDropdownOpen(matches.length > 0);
+      const availableMatches = [];
+      const draftedMatches = [];
+
+      players.forEach(player => {
+        const matchesSearch = player.name.toLowerCase().includes(searchLower) ||
+                            player.team.toLowerCase().includes(searchLower) ||
+                            player.position.toLowerCase().includes(searchLower);
+
+        if (matchesSearch) {
+          if (player.status === 'available') {
+            availableMatches.push(player);
+          } else if ((player.status === 'drafted' || player.status === 'keeper') && player.pickNumber) {
+            // Add draft information to the player object for display
+            const round = Math.floor((player.pickNumber - 1) / numTeams) + 1;
+            const pickInRound = ((player.pickNumber - 1) % numTeams) + 1;
+
+            draftedMatches.push({
+              ...player,
+              draftDisplayInfo: {
+                pickNumber: player.pickNumber,
+                round,
+                pickInRound,
+                teamId: player.teamId,
+                teamName: player.teamName,
+                isKeeper: player.status === 'keeper'
+              }
+            });
+          }
+        }
+      });
+
+      // Limit results to keep dropdown manageable
+      const available = availableMatches.slice(0, 6).sort((a, b) => a.rank - b.rank);
+      const drafted = draftedMatches.slice(0, 6).sort((a, b) => a.draftDisplayInfo.pickNumber - b.draftDisplayInfo.pickNumber);
+
+      setFilteredPlayers({ available, drafted });
+      setIsDropdownOpen(available.length > 0 || drafted.length > 0);
       setSelectedIndex(-1);
     } else {
-      setFilteredPlayers([]);
+      setFilteredPlayers({ available: [], drafted: [] });
       setIsDropdownOpen(false);
     }
-  }, [searchQuery, players, draftedPlayers]);
+  }, [searchQuery, players, numTeams]);
 
   // Scan for CSV files
   const scanForCSVFiles = async () => {
@@ -110,26 +148,32 @@ const UnifiedControlPanel = ({
     }
   };
 
-  // Keyboard navigation for search
+  // Keyboard navigation for search - UPDATED for available vs drafted sections
   const handleKeyDown = (e) => {
-    if (!isDropdownOpen || filteredPlayers.length === 0) return;
+    const totalAvailable = filteredPlayers.available.length;
+    const totalDrafted = filteredPlayers.drafted.length;
+    const totalItems = totalAvailable + totalDrafted;
+
+    if (!isDropdownOpen || totalItems === 0) return;
 
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex(prev => prev < filteredPlayers.length - 1 ? prev + 1 : prev);
+        setSelectedIndex(prev => prev < totalItems - 1 ? prev + 1 : prev);
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
+        setSelectedIndex(prev => prev > 0 ? prev - 1 : 0);
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedIndex >= 0) {
-          draftPlayer(filteredPlayers[selectedIndex].id);
+        if (selectedIndex >= 0 && selectedIndex < totalAvailable) {
+          // Selected an available player
+          draftPlayer(filteredPlayers.available[selectedIndex].id);
           setSearchQuery('');
           setIsDropdownOpen(false);
         }
+        // Can't draft already drafted players
         break;
       case 'Escape':
         setIsDropdownOpen(false);
@@ -200,10 +244,20 @@ const UnifiedControlPanel = ({
       border: `1px solid ${themeStyles.border}`,
       borderTop: 'none',
       borderRadius: '0 0 6px 6px',
-      maxHeight: '320px',
+      maxHeight: '400px',
       overflowY: 'auto',
       zIndex: 1000,
       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+    },
+    sectionHeader: {
+      padding: '8px 16px',
+      fontSize: '11px',
+      fontWeight: '600',
+      color: themeStyles.text.secondary,
+      backgroundColor: themeStyles.hover.background,
+      borderBottom: `1px solid ${themeStyles.border}`,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px'
     },
     dropdownItem: {
       padding: '12px 16px',
@@ -220,6 +274,10 @@ const UnifiedControlPanel = ({
     },
     dropdownItemHover: {
       backgroundColor: themeStyles.hover.background
+    },
+    dropdownItemDrafted: {
+      opacity: 0.7,
+      cursor: 'default'
     },
     playerInfo: {
       flex: 1,
@@ -246,6 +304,12 @@ const UnifiedControlPanel = ({
       fontWeight: '500',
       minWidth: '35px',
       textAlign: 'right'
+    },
+    draftInfo: {
+      fontSize: '11px',
+      color: themeStyles.text.muted,
+      textAlign: 'right',
+      lineHeight: '1.3'
     },
     actionButtons: {
       display: 'flex',
@@ -351,6 +415,11 @@ const UnifiedControlPanel = ({
       borderRadius: '12px',
       fontWeight: '600',
       marginLeft: '4px'
+    },
+    keeperIndicator: {
+      fontSize: '10px',
+      color: '#7c3aed',
+      fontWeight: '600'
     }
   };
 
@@ -371,115 +440,176 @@ const UnifiedControlPanel = ({
 
           {isDropdownOpen && (
             <div style={styles.dropdown}>
-              {filteredPlayers.map((player, index) => {
-                const isSelected = index === selectedIndex;
-                const isWatched = isPlayerWatched(player.id);
-                const isAvoided = isPlayerAvoided(player.id);
-
-                return (
-                  <div
-                    key={player.id}
-                    style={{
-                      ...styles.dropdownItem,
-                      ...(isSelected ? styles.dropdownItemSelected : {}),
-                      // Add subtle background for watched/avoided players
-                      backgroundColor: isSelected ? '#2563eb' :
-                        isWatched ? `${watchHighlightColor}20` :
-                        isAvoided ? `${avoidHighlightColor}20` : 'transparent'
-                    }}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                  >
-                    <div style={styles.playerInfo}>
-                      <div style={{
-                        ...styles.playerName,
-                        color: isSelected ? '#ffffff' : themeStyles.text.primary
-                      }}>
-                        {player.name}
-                        {isWatched && <span style={styles.statusIndicator}>👁️</span>}
-                        {isAvoided && <span style={styles.statusIndicator}>🚫</span>}
-                      </div>
-                      <div style={{
-                        ...styles.playerMeta,
-                        color: isSelected ? '#e0e7ff' : themeStyles.text.secondary
-                      }}>
-                        <span>{player.position}</span>
-                        <span>•</span>
-                        <span>{player.team}</span>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{
-                        ...styles.playerRank,
-                        color: isSelected ? '#e0e7ff' : themeStyles.text.muted
-                      }}>
-                        #{player.rank}
-                      </div>
-
-                      <div style={styles.actionButtons}>
-                        {/* Watch Button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleWatchPlayer(player.id);
-                          }}
-                          style={{
-                            ...styles.actionButton,
-                            ...(isWatched ? styles.watchButtonActive : styles.watchButton),
-                            opacity: isSelected ? 0.9 : 1
-                          }}
-                          title={isWatched ? 'Remove from watch list' : 'Add to watch list'}
-                        >
-                          <Eye size={12} />
-                        </button>
-
-                        {/* Avoid Button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleAvoidPlayer(player.id);
-                          }}
-                          style={{
-                            ...styles.actionButton,
-                            ...(isAvoided ? styles.avoidButtonActive : styles.avoidButton),
-                            opacity: isSelected ? 0.9 : 1
-                          }}
-                          title={isAvoided ? 'Remove from avoid list' : 'Add to avoid list'}
-                        >
-                          <X size={12} />
-                        </button>
-
-                        {/* Draft Button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            draftPlayer(player.id);
-                            setSearchQuery('');
-                            setIsDropdownOpen(false);
-                          }}
-                          style={{
-                            ...styles.actionButton,
-                            ...styles.draftButton,
-                            opacity: isSelected ? 0.9 : 1
-                          }}
-                          title="Draft player"
-                        >
-                          <UserPlus size={12} />
-                        </button>
-                      </div>
-                    </div>
+              {/* Available Players Section */}
+              {filteredPlayers.available.length > 0 && (
+                <>
+                  <div style={styles.sectionHeader}>
+                    Available Players ({filteredPlayers.available.length})
                   </div>
-                );
-              })}
+                  {filteredPlayers.available.map((player, index) => {
+                    const isSelected = index === selectedIndex;
+                    const isWatched = player.isWatched;
+                    const isAvoided = player.isAvoided;
 
-              {filteredPlayers.length === 0 && searchQuery.length >= 2 && (
+                    return (
+                      <div
+                        key={player.id}
+                        style={{
+                          ...styles.dropdownItem,
+                          ...(isSelected ? styles.dropdownItemSelected : {}),
+                          backgroundColor: isSelected ? '#2563eb' :
+                            isWatched ? `${watchHighlightColor}20` :
+                            isAvoided ? `${avoidHighlightColor}20` : 'transparent'
+                        }}
+                        onMouseEnter={() => setSelectedIndex(index)}
+                      >
+                        <div style={styles.playerInfo}>
+                          <div style={{
+                            ...styles.playerName,
+                            color: isSelected ? '#ffffff' : themeStyles.text.primary
+                          }}>
+                            {player.name}
+                            {isWatched && <span style={styles.statusIndicator}>👁️</span>}
+                            {isAvoided && <span style={styles.statusIndicator}>🚫</span>}
+                          </div>
+                          <div style={{
+                            ...styles.playerMeta,
+                            color: isSelected ? '#e0e7ff' : themeStyles.text.secondary
+                          }}>
+                            <span>{player.position}</span>
+                            <span>•</span>
+                            <span>{player.team}</span>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            ...styles.playerRank,
+                            color: isSelected ? '#e0e7ff' : themeStyles.text.muted
+                          }}>
+                            #{player.rank}
+                          </div>
+
+                          <div style={styles.actionButtons}>
+                            {/* Watch Button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleWatchPlayer(player.id);
+                              }}
+                              style={{
+                                ...styles.actionButton,
+                                ...(isWatched ? styles.watchButtonActive : styles.watchButton),
+                                opacity: isSelected ? 0.9 : 1
+                              }}
+                              title={isWatched ? 'Remove from watch list' : 'Add to watch list'}
+                            >
+                              <Eye size={12} />
+                            </button>
+
+                            {/* Avoid Button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleAvoidPlayer(player.id);
+                              }}
+                              style={{
+                                ...styles.actionButton,
+                                ...(isAvoided ? styles.avoidButtonActive : styles.avoidButton),
+                                opacity: isSelected ? 0.9 : 1
+                              }}
+                              title={isAvoided ? 'Remove from avoid list' : 'Add to avoid list'}
+                            >
+                              <X size={12} />
+                            </button>
+
+                            {/* Draft Button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                draftPlayer(player.id);
+                                setSearchQuery('');
+                                setIsDropdownOpen(false);
+                              }}
+                              style={{
+                                ...styles.actionButton,
+                                ...styles.draftButton,
+                                opacity: isSelected ? 0.9 : 1
+                              }}
+                              title="Draft player"
+                            >
+                              <UserPlus size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Drafted Players Section */}
+              {filteredPlayers.drafted.length > 0 && (
+                <>
+                  <div style={styles.sectionHeader}>
+                    Already Drafted ({filteredPlayers.drafted.length})
+                  </div>
+                  {filteredPlayers.drafted.map((player, index) => {
+                    const adjustedIndex = filteredPlayers.available.length + index;
+                    const isSelected = adjustedIndex === selectedIndex;
+
+                    return (
+                      <div
+                        key={player.id}
+                        style={{
+                          ...styles.dropdownItem,
+                          ...styles.dropdownItemDrafted,
+                          ...(isSelected ? { backgroundColor: 'rgba(37, 99, 235, 0.1)' } : {})
+                        }}
+                        onMouseEnter={() => setSelectedIndex(adjustedIndex)}
+                      >
+                        <div style={styles.playerInfo}>
+                          <div style={{
+                            ...styles.playerName,
+                            color: themeStyles.text.primary
+                          }}>
+                            {player.name}
+                            {player.draftDisplayInfo.isKeeper && (
+                              <span style={styles.keeperIndicator}>👑</span>
+                            )}
+                          </div>
+                          <div style={styles.playerMeta}>
+                            <span>{player.position}</span>
+                            <span>•</span>
+                            <span>{player.team}</span>
+                            <span>•</span>
+                            <span>#{player.rank}</span>
+                          </div>
+                        </div>
+
+                        <div style={styles.draftInfo}>
+                          <div style={{ fontWeight: '600', marginBottom: '2px' }}>
+                            Pick #{player.draftDisplayInfo.pickNumber}
+                          </div>
+                          <div>
+                            R{player.draftDisplayInfo.round} • {player.draftDisplayInfo.teamName}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* No Results */}
+              {filteredPlayers.available.length === 0 && filteredPlayers.drafted.length === 0 && searchQuery.length >= 2 && (
                 <div style={{
                   ...styles.dropdownItem,
                   cursor: 'default',
                   justifyContent: 'center'
                 }}>
                   <div style={{ color: themeStyles.text.muted, fontSize: '14px' }}>
-                    No undrafted players found
+                    No players found matching "{searchQuery}"
                   </div>
                 </div>
               )}
