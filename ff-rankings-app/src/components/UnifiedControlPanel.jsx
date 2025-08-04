@@ -12,7 +12,6 @@ const UnifiedControlPanel = ({
   draftPlayer,
   onRestartDraft,
   onSwitchCSV,
-  onNewDraft,
   onSaveDraft,
   onClearSavedState,
   // Watch/Avoid functionality
@@ -43,8 +42,15 @@ const UnifiedControlPanel = ({
   const csvFiles = [
     'FantasyPros 2025 PPR.csv',
     '4for4 Underdog ADP.csv',
+    'BB10s ADP.csv',
+    'CBS ADP.csv',
     'ESPN ADP.csv',
-    'Yahoo ADP.csv'
+    'FFPC ADP.csv',
+    'Y! ADP.csv',
+    'FantasyPros .5 PPR.csv',
+    'FantasyPros 2025 Top 10 Accurate Overall PPR.csv',
+    'FantasyNow+ PPR.csv',
+    'The Fantasy Headliners PPR.csv'
   ];
 
   // Filter players for search dropdown
@@ -530,18 +536,6 @@ const UnifiedControlPanel = ({
           >
             <RotateCcw size={14} />
             Restart
-          </button>
-
-          <button
-            onClick={onNewDraft}
-            style={{
-              ...styles.button,
-              backgroundColor: '#dc2626',
-              color: '#ffffff'
-            }}
-          >
-            <Plus size={14} />
-            New Draft
           </button>
 
           {/* Save Controls */}

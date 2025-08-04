@@ -153,16 +153,19 @@ const DraftTrackerContent = () => {
     if (hasShownRestoreDialogRef.current) return;
 
     const savedState = loadDraftState();
+    console.log(savedState);
     if (savedState?.players?.length > 0) {
       // Restore state with explicit setters
       if (savedState.players !== undefined) setPlayers(savedState.players);
       if (savedState.draftedPlayers !== undefined) setDraftedPlayers(savedState.draftedPlayers);
       if (savedState.currentDraftPick !== undefined) setCurrentDraftPick(savedState.currentDraftPick);
       if (savedState.watchedPlayers !== undefined) setWatchedPlayers(savedState.watchedPlayers);
+      if (savedState.avoidedPlayers !== undefined) setAvoidedPlayers(savedState.avoidedPlayers);
       if (savedState.avoidHighlightColor !== undefined) setAvoidHighlightColor(savedState.avoidHighlightColor);
       if (savedState.avoidHighlightOpacity !== undefined) setAvoidHighlightOpacity(savedState.avoidHighlightOpacity);
       if (savedState.isKeeperMode !== undefined) setIsKeeperMode(savedState.isKeeperMode);
       if (savedState.keepers !== undefined) setKeepers(savedState.keepers);
+      if (savedState.teamNames !== undefined) setTeamNames(savedState.teamNames);
 
       hasShownRestoreDialogRef.current = true;
 
@@ -352,6 +355,7 @@ const DraftTrackerContent = () => {
   const handleNewDraft = () => {
     if (window.confirm("Start completely new draft? This clears everything including keepers.")) {
       setDraftedPlayers([]);
+      setPlayers([]);
       setCurrentDraftPick(1);
       setWatchedPlayers([]);
       setAvoidedPlayers([]);
@@ -1250,9 +1254,8 @@ const DraftTrackerContent = () => {
             players={players}
             draftPlayer={draftPlayer}
             onRestartDraft={restartDraft}
-            onNewDraft={handleNewDraft}
             onSaveDraft={() => saveDraftState(true)}
-            onClearSavedState={clearDraftState}
+            onClearSavedState={handleNewDraft}
             watchedPlayers={watchedPlayers}
             toggleWatchPlayer={toggleWatchPlayer}
             isPlayerWatched={isPlayerWatched}
