@@ -281,7 +281,7 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
     gridTable: {
       width: '100%',
       borderCollapse: 'collapse',
-      minWidth: `${numTeams * 120 + 80}px` // Ensure minimum width
+      minWidth: `${numTeams * 10 + 80}px` // Ensure minimum width
     },
     gridHeaderRow: {
       backgroundColor: themeStyles.hover.background,
@@ -297,11 +297,11 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
       color: themeStyles.text.primary,
       textAlign: 'center',
       border: `1px solid ${themeStyles.border}`,
-      minWidth: '100px'
+      minWidth: '5px'
     },
     gridRoundHeader: {
       backgroundColor: themeStyles.card.backgroundColor,
-      minWidth: '60px',
+      minWidth: '4px',
       position: 'sticky',
       left: 0,
       zIndex: 11
@@ -314,8 +314,8 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
       fontSize: '11px',
       border: `1px solid ${themeStyles.border}`,
       textAlign: 'center',
-      minWidth: '100px',
-      maxWidth: '120px',
+      minWidth: '80px',
+      maxWidth: '80px',
       height: '60px',
       verticalAlign: 'middle',
       position: 'relative'
@@ -327,7 +327,7 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
       position: 'sticky',
       left: 0,
       zIndex: 5,
-      minWidth: '60px'
+      minWidth: '10px'
     },
     currentPickCell: {
       backgroundColor: '#2563eb',
