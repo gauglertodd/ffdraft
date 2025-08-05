@@ -247,34 +247,171 @@ const DraftTrackerContent = () => {
       .replace(/\s/g, ''); // Remove all spaces for exact matching
   };
 
-  const fuzzyMatchPlayerName = (targetName, candidateName, threshold = 0.8) => {
+const fuzzyMatchPlayerName = (targetName, candidateName, targetPosition = null, candidatePosition = null, threshold = 0.8) => {
     const target = normalizePlayerName(targetName);
     const candidate = normalizePlayerName(candidateName);
 
+    // Base name similarity score
+    let nameScore = 0;
+
     // Exact match
-    if (target === candidate) return 1.0;
+    if (target === candidate) {
+      nameScore = 1.0;
+    }
+    // Check if one contains the other (for cases like "Brian Thomas" vs "Brian Thomas Jr")
+    else if (target.includes(candidate) || candidate.includes(target)) {
+      // Only give high score if the shorter name is substantial portion of longer name
+      const longer = target.length > candidate.length ? target : candidate;
+      const shorter = target.length > candidate.length ? candidate : target;
 
-    // Check if one contains the other
-    if (target.includes(candidate) || candidate.includes(target)) {
-      return 0.9;
+      // Require at least 70% overlap for containment matches
+      const overlapRatio = shorter.length / longer.length;
+      if (overlapRatio >= 0.7) {
+        nameScore = 0.9;
+      } else {
+        nameScore = 0.3; // Low score for poor containment
+      }
+    }
+    // Much stricter similarity calculation
+    else {
+      const longer = target.length > candidate.length ? target : candidate;
+      const shorter = target.length > candidate.length ? candidate : target;
+
+      if (longer.length === 0) {
+        nameScore = 1.0;
+      } else {
+        // Count exact character matches in order
+        let matches = 0;
+        let longerIndex = 0;
+
+        for (let i = 0; i < shorter.length; i++) {
+          for (let j = longerIndex; j < longer.length; j++) {
+            if (shorter[i] === longer[j]) {
+              matches++;
+              longerIndex = j + 1;
+              break;
+            }
+          }
+        }
+
+        // Require very high character match ratio
+        nameScore = (matches * 2) / (shorter.length + longer.length);
+
+        // Additional penalty for very different lengths
+        const lengthRatio = shorter.length / longer.length;
+        if (lengthRatio < 0.6) {
+          nameScore *= 0.5; // Harsh penalty for very different lengths
+        }
+      }
     }
 
-    // Simple similarity check
-    const longer = target.length > candidate.length ? target : candidate;
-    const shorter = target.length > candidate.length ? candidate : target;
+    // Position matching bonus/penalty
+    let positionMultiplier = 1.0;
+    if (targetPosition && candidatePosition) {
+      const targetPos = targetPosition.toUpperCase();
+      const candidatePos = candidatePosition.toUpperCase();
 
-    if (longer.length === 0) return 1.0;
-
-    let matches = 0;
-    for (let i = 0; i < shorter.length; i++) {
-      if (longer.includes(shorter[i])) matches++;
+      if (targetPos === candidatePos) {
+        // Exact position match - moderate boost
+        positionMultiplier = 1.2;
+      } else {
+        // Position mismatch - complete rejection
+        return 0; // Don't even consider cross-position matches
+      }
     }
 
-    const similarity = matches / longer.length;
-    return similarity >= threshold ? similarity : 0;
+    // Calculate final score
+    const finalScore = nameScore * positionMultiplier;
+
+    // Much higher threshold
+    return finalScore >= threshold ? finalScore : 0;
   };
 
-  const createTeamMappingFromPreloadedCSVs = async () => {
+  const applyTeamMapping = async (playersWithoutTeams, sourceFilename = '') => {
+    if (playersWithoutTeams.length === 0) {
+      console.log('✅ No players need team mapping');
+      return { mappedCount: 0, unmappedPlayers: [] };
+    }
+
+    console.log(`🔄 Attempting to map teams for ${playersWithoutTeams.length} players...`);
+
+    const teamMapping = await createTeamMappingFromPreloadedCSVs();
+
+    if (teamMapping.size === 0) {
+      console.log('❌ No team mapping data available from preloaded CSVs');
+      return { mappedCount: 0, unmappedPlayers: playersWithoutTeams };
+    }
+
+    let mappedCount = 0;
+    const unmappedPlayers = [];
+
+    for (const player of playersWithoutTeams) {
+      let bestMatch = null;
+      let bestScore = 0;
+      let bestMatchInfo = null;
+
+      console.log(`🔍 Looking for matches for ${player.name} (${player.position})`);
+
+      // Try to find the best match in our team mapping
+      for (const [mappedName, playerData] of teamMapping.entries()) {
+        // STRICT POSITION FILTER - Skip if positions don't match
+        if (playerData.position) {
+          const refPosition = playerData.position.toUpperCase().trim();
+          const targetPosition = player.position.toUpperCase().trim();
+
+          if (refPosition !== targetPosition) {
+            continue; // Skip this player entirely - different position
+          }
+        } else {
+          continue; // Skip players with no position data
+        }
+
+        // Only do name matching for players with the same position
+        const score = fuzzyMatchPlayerName(
+          player.name,           // Target player name
+          mappedName,           // Reference player name
+          player.position,      // Target player position
+          playerData.position,  // Reference player position
+          0.85 // Much higher threshold - be very picky
+        );
+
+        // Log all potential matches for debugging
+        if (score > 0) {
+          console.log(`  📋 Potential match: "${mappedName}" (${playerData.position}) on ${playerData.team} - Score: ${(score * 100).toFixed(1)}%`);
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = playerData.team;
+          bestMatchInfo = {
+            referenceName: mappedName,
+            referencePosition: playerData.position,
+            confidence: score
+          };
+        }
+      }
+
+      // Much higher threshold for acceptance
+      if (bestMatch && bestScore >= 0.85) {
+        player.team = bestMatch;
+        mappedCount++;
+        console.log(`✅ Mapped ${player.name} (${player.position}) → ${bestMatch} | Match: "${bestMatchInfo.referenceName}" (${bestMatchInfo.referencePosition}) | Confidence: ${(bestScore * 100).toFixed(1)}%`);
+      } else {
+        unmappedPlayers.push(player);
+        if (bestMatchInfo) {
+          console.log(`❌ Best match for ${player.name} (${player.position}) was "${bestMatchInfo.referenceName}" with ${(bestScore * 100).toFixed(1)}% confidence - below 85% threshold`);
+        } else {
+          console.log(`❌ No matches found for ${player.name} (${player.position})`);
+        }
+      }
+    }
+
+    console.log(`📊 Team mapping results: ${mappedCount} mapped, ${unmappedPlayers.length} unmapped`);
+
+    return { mappedCount, unmappedPlayers };
+  };
+
+const createTeamMappingFromPreloadedCSVs = async () => {
     const csvFiles = [
       'FantasyPros 2025 PPR.csv',
       '4for4 Underdog ADP.csv',
@@ -289,16 +426,20 @@ const DraftTrackerContent = () => {
       'The Fantasy Headliners PPR.csv'
     ];
 
-    const teamMapping = new Map();
+    const teamMapping = new Map(); // Will store { normalizedName: { team, position } }
     let filesProcessed = 0;
 
-    console.log('🔍 Building team mapping from preloaded CSV files...');
+    console.log('🔍 Building team mapping with position data from preloaded CSV files...');
 
     // Column patterns for reference files
     const COLUMN_PATTERNS = {
       name: [
         'name', 'player', 'playername', 'player_name', 'player name', 'full_name', 'fullname',
         'full name', 'lastname', 'last_name', 'first_name', 'firstname'
+      ],
+      position: [
+        'position', 'pos', 'positions', 'player_position', 'player position', 'eligibility',
+        'eligible_positions', 'eligible positions', 'fantasy_position', 'fantasy position'
       ],
       team: [
         'team', 'tm', 'nfl_team', 'nfl team', 'franchise', 'club', 'organization',
@@ -333,6 +474,7 @@ const DraftTrackerContent = () => {
 
         const nameIndex = findColumnIndex(headers, COLUMN_PATTERNS.name);
         const teamIndex = findColumnIndex(headers, COLUMN_PATTERNS.team);
+        const positionIndex = findColumnIndex(headers, COLUMN_PATTERNS.position);
 
         if (nameIndex === -1 || teamIndex === -1) {
           console.log(`⚠️ Skipping ${filename}: missing name or team columns`);
@@ -344,11 +486,15 @@ const DraftTrackerContent = () => {
           const values = line.split(',').map(v => v.trim());
           const playerName = values[nameIndex];
           const playerTeam = values[teamIndex];
+          const playerPosition = positionIndex !== -1 ? values[positionIndex] : null;
 
           if (playerName && playerTeam) {
             const normalizedName = normalizePlayerName(playerName);
             if (!teamMapping.has(normalizedName)) {
-              teamMapping.set(normalizedName, playerTeam.toUpperCase());
+              teamMapping.set(normalizedName, {
+                team: playerTeam.toUpperCase(),
+                position: playerPosition ? playerPosition.toUpperCase() : null
+              });
             }
           }
         });
@@ -363,52 +509,6 @@ const DraftTrackerContent = () => {
 
     console.log(`📊 Team mapping complete: ${teamMapping.size} players from ${filesProcessed} files`);
     return teamMapping;
-  };
-
-  const applyTeamMapping = async (playersWithoutTeams, sourceFilename = '') => {
-    if (playersWithoutTeams.length === 0) {
-      console.log('✅ No players need team mapping');
-      return { mappedCount: 0, unmappedPlayers: [] };
-    }
-
-    console.log(`🔄 Attempting to map teams for ${playersWithoutTeams.length} players...`);
-
-    const teamMapping = await createTeamMappingFromPreloadedCSVs();
-
-    if (teamMapping.size === 0) {
-      console.log('❌ No team mapping data available from preloaded CSVs');
-      return { mappedCount: 0, unmappedPlayers: playersWithoutTeams };
-    }
-
-    let mappedCount = 0;
-    const unmappedPlayers = [];
-
-    for (const player of playersWithoutTeams) {
-      let bestMatch = null;
-      let bestScore = 0;
-
-      // Try to find the best match in our team mapping
-      for (const [mappedName, team] of teamMapping.entries()) {
-        const score = fuzzyMatchPlayerName(player.name, mappedName);
-        if (score > bestScore && score >= 0.8) {
-          bestScore = score;
-          bestMatch = team;
-        }
-      }
-
-      if (bestMatch) {
-        player.team = bestMatch;
-        mappedCount++;
-        console.log(`✅ Mapped ${player.name} → ${bestMatch} (confidence: ${(bestScore * 100).toFixed(1)}%)`);
-      } else {
-        unmappedPlayers.push(player);
-        console.log(`❌ No team found for ${player.name}`);
-      }
-    }
-
-    console.log(`📊 Team mapping results: ${mappedCount} mapped, ${unmappedPlayers.length} unmapped`);
-
-    return { mappedCount, unmappedPlayers };
   };
 
   // Enhanced CSV parsing with flexible column detection and team mapping
