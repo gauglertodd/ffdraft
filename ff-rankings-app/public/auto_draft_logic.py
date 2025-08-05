@@ -97,7 +97,7 @@ def apply_strategy_variability(available_players: List[dict], strategy_result_id
 
         selected_player = available_sorted[selected_index]
         console.log(f"    Variability applied: selected rank {selected_index + 1} instead of rank 1 (variability: {variability:.1f})")
-        return int(selected_player['id'])
+        return selected_player['id']
     except Exception as e:
         console.log(f"Error in variability selection: {e}")
         # Fallback to original choice if something goes wrong
@@ -369,7 +369,7 @@ def auto_draft_player(available_players_json: str, team_roster_json: str, strate
             reasoning += f" (Variability: {int(variability * 100)}%)"
 
         return json.dumps({
-            "player_id": int(selected_player_id),
+            "player_id": selected_player_id,
             "player_name": selected_player['name'],
             "reasoning": reasoning,
             "strategy_used": strategy_obj.strategy_name,

@@ -270,11 +270,11 @@ class DraftStrategy(ABC):
                 if required_position == Position.DST:
                     dst_player = self._get_best_player_at_position(available_players, 'DST')
                     if dst_player:
-                        return int(dst_player['id'])
+                        return dst_player['id']
                 elif required_position == Position.K:
                     k_player = self._get_best_player_at_position(available_players, 'K')
                     if k_player:
-                        return int(k_player['id'])
+                        return k_player['id']
 
         # Otherwise use the normal needs-based logic (only in final 2 rounds)
         if not team_roster.needs_dst_or_k():
@@ -287,13 +287,13 @@ class DraftStrategy(ABC):
         if dst_count == 0 and team_roster.can_fill_position(Position.DST):
             dst_player = self._get_best_player_at_position(available_players, 'DST')
             if dst_player:
-                return int(dst_player['id'])
+                return dst_player['id']
 
         # Then draft K if we need it
         if k_count == 0 and team_roster.can_fill_position(Position.K):
             k_player = self._get_best_player_at_position(available_players, 'K')
             if k_player:
-                return int(k_player['id'])
+                return k_player['id']
 
         return None
 
@@ -309,14 +309,14 @@ class DraftStrategy(ABC):
 
         if non_qb_players:
             best_player = min(non_qb_players, key=lambda p: p['rank'])
-            return int(best_player['id'])
+            return best_player['id']
 
         # Only consider QB if no other options and QB rules allow it
         if self._should_draft_qb(team_roster):
             qb_players = [p for p in skill_players if p['position'] == 'QB']
             if qb_players:
                 best_qb = min(qb_players, key=lambda p: p['rank'])
-                return int(best_qb['id'])
+                return best_qb['id']
 
         return None
 
@@ -346,7 +346,7 @@ class BestPlayerAvailableStrategy(DraftStrategy):
             return None
 
         best_player = min(skill_players, key=lambda p: p['rank'])
-        return int(best_player['id'])
+        return best_player['id']
 
 
 class TierBasedStrategy(DraftStrategy):
@@ -378,11 +378,11 @@ class TierBasedStrategy(DraftStrategy):
         if not tiered_players:
             # Fall back to BPA if no tier data
             best_player = min(skill_players, key=lambda p: p['rank'])
-            return int(best_player['id'])
+            return best_player['id']
 
         # Sort by tier (ascending - lower tier = better), then by rank
         best_player = min(tiered_players, key=lambda p: (p['tier'], p['rank']))
-        return int(best_player['id'])
+        return best_player['id']
 
 
 class PositionalNeedStrategy(DraftStrategy):
@@ -418,7 +418,7 @@ class PositionalNeedStrategy(DraftStrategy):
                 position_players = [p for p in skill_players if p['position'] == position.value]
                 if position_players:
                     best_at_position = min(position_players, key=lambda p: p['rank'])
-                    return int(best_at_position['id'])
+                    return best_at_position['id']
 
         # If no specific needs, go BPA for skill positions (excluding QB if needed)
         if not self._should_draft_qb(team_roster):
@@ -426,7 +426,7 @@ class PositionalNeedStrategy(DraftStrategy):
 
         if skill_players:
             best_player = min(skill_players, key=lambda p: p['rank'])
-            return int(best_player['id'])
+            return best_player['id']
 
         return None
 
@@ -458,32 +458,32 @@ class WRHeavyStrategy(DraftStrategy):
         if current_round <= 6 and wr_count < 3:
             wr_player = self._get_best_player_at_position(skill_players, 'WR')
             if wr_player and team_roster.can_fill_position(Position.WR):
-                return int(wr_player['id'])
+                return wr_player['id']
 
         # Get QB if we don't have one and it's round 5+ and rules allow
         if qb_count == 0 and current_round >= 5 and self._should_draft_qb(team_roster):
             qb_player = self._get_best_player_at_position(skill_players, 'QB')
             if qb_player and team_roster.can_fill_position(Position.QB):
-                return int(qb_player['id'])
+                return qb_player['id']
 
         # Get at least 1 RB if we don't have any and it's getting late
         if rb_count == 0 and current_round >= 4:
             rb_player = self._get_best_player_at_position(skill_players, 'RB')
             if rb_player and team_roster.can_fill_position(Position.RB):
-                return int(rb_player['id'])
+                return rb_player['id']
 
         # Continue prioritizing WRs
         if wr_count < 5:
             wr_player = self._get_best_player_at_position(skill_players, 'WR')
             if wr_player and team_roster.can_fill_position(Position.WR):
-                return int(wr_player['id'])
+                return wr_player['id']
 
         # Fill other needs by BPA (excluding QB if rules don't allow)
         if not self._should_draft_qb(team_roster):
             skill_players = [p for p in skill_players if p['position'] != 'QB']
 
         if skill_players:
-            return int(min(skill_players, key=lambda p: p['rank'])['id'])
+            return min(skill_players, key=lambda p: p['rank'])['id']
         return None
 
 
@@ -513,32 +513,32 @@ class RBHeavyStrategy(DraftStrategy):
         if current_round <= 5 and rb_count < 3:
             rb_player = self._get_best_player_at_position(skill_players, 'RB')
             if rb_player and team_roster.can_fill_position(Position.RB):
-                return int(rb_player['id'])
+                return rb_player['id']
 
         # Get QB if we don't have one and it's round 5+ and rules allow
         if qb_count == 0 and current_round >= 5 and self._should_draft_qb(team_roster):
             qb_player = self._get_best_player_at_position(skill_players, 'QB')
             if qb_player and team_roster.can_fill_position(Position.QB):
-                return int(qb_player['id'])
+                return qb_player['id']
 
         # Get at least 2 WRs
         if wr_count < 2:
             wr_player = self._get_best_player_at_position(skill_players, 'WR')
             if wr_player and team_roster.can_fill_position(Position.WR):
-                return int(wr_player['id'])
+                return wr_player['id']
 
         # Continue prioritizing RBs
         if rb_count < 5:
             rb_player = self._get_best_player_at_position(skill_players, 'RB')
             if rb_player and team_roster.can_fill_position(Position.RB):
-                return int(rb_player['id'])
+                return rb_player['id']
 
         # Fill other needs by BPA (excluding QB if rules don't allow)
         if not self._should_draft_qb(team_roster):
             skill_players = [p for p in skill_players if p['position'] != 'QB']
 
         if skill_players:
-            return int(min(skill_players, key=lambda p: p['rank'])['id'])
+            return min(skill_players, key=lambda p: p['rank'])['id']
         return None
 
 
@@ -569,7 +569,7 @@ class HeroWRStrategy(DraftStrategy):
         if current_round == 1:
             wr_player = self._get_best_player_at_position(skill_players, 'WR')
             if wr_player and team_roster.can_fill_position(Position.WR):
-                return int(wr_player['id'])
+                return wr_player['id']
 
         # Rounds 2-6: focus on RB/TE to build supporting cast
         if current_round <= 6 and wr_count >= 1:
@@ -577,43 +577,43 @@ class HeroWRStrategy(DraftStrategy):
             if rb_count < 3:
                 rb_player = self._get_best_player_at_position(skill_players, 'RB')
                 if rb_player and team_roster.can_fill_position(Position.RB):
-                    return int(rb_player['id'])
+                    return rb_player['id']
 
             # Then get TE for receiving depth
             if te_count < 2:
                 te_player = self._get_best_player_at_position(skill_players, 'TE')
                 if te_player and team_roster.can_fill_position(Position.TE):
-                    return int(te_player['id'])
+                    return te_player['id']
 
             # Get second WR if great value available
             if wr_count < 2:
                 wr_player = self._get_best_player_at_position(skill_players, 'WR')
                 if wr_player and team_roster.can_fill_position(Position.WR):
-                    return int(wr_player['id'])
+                    return wr_player['id']
 
         # Get QB if needed (rounds 4-7) and rules allow
         if qb_count == 0 and 4 <= current_round <= 7 and self._should_draft_qb(team_roster):
             qb_player = self._get_best_player_at_position(skill_players, 'QB')
             if qb_player and team_roster.can_fill_position(Position.QB):
-                return int(qb_player['id'])
+                return qb_player['id']
 
         # Late rounds: continue building RB depth and add more WRs
         if rb_count < 4:
             rb_player = self._get_best_player_at_position(skill_players, 'RB')
             if rb_player and team_roster.can_fill_position(Position.RB):
-                return int(rb_player['id'])
+                return rb_player['id']
 
         if wr_count < 4:
             wr_player = self._get_best_player_at_position(skill_players, 'WR')
             if wr_player and team_roster.can_fill_position(Position.WR):
-                return int(wr_player['id'])
+                return wr_player['id']
 
         # Fill remaining needs by BPA (excluding QB if rules don't allow)
         if not self._should_draft_qb(team_roster):
             skill_players = [p for p in skill_players if p['position'] != 'QB']
 
         if skill_players:
-            return int(min(skill_players, key=lambda p: p['rank'])['id'])
+            return min(skill_players, key=lambda p: p['rank'])['id']
         return None
 
 
@@ -644,7 +644,7 @@ class HeroRBStrategy(DraftStrategy):
         if current_round == 1:
             rb_player = self._get_best_player_at_position(skill_players, 'RB')
             if rb_player and team_roster.can_fill_position(Position.RB):
-                return int(rb_player['id'])
+                return rb_player['id']
 
         # Rounds 2-6: focus on WR/TE
         if current_round <= 6 and rb_count >= 1:
@@ -652,25 +652,25 @@ class HeroRBStrategy(DraftStrategy):
             if wr_count < 3:
                 wr_player = self._get_best_player_at_position(skill_players, 'WR')
                 if wr_player and team_roster.can_fill_position(Position.WR):
-                    return int(wr_player['id'])
+                    return wr_player['id']
 
             if te_count < 2:
                 te_player = self._get_best_player_at_position(skill_players, 'TE')
                 if te_player and team_roster.can_fill_position(Position.TE):
-                    return int(te_player['id'])
+                    return te_player['id']
 
         # Get QB if needed and rules allow
         if qb_count == 0 and current_round >= 4 and self._should_draft_qb(team_roster):
             qb_player = self._get_best_player_at_position(skill_players, 'QB')
             if qb_player and team_roster.can_fill_position(Position.QB):
-                return int(qb_player['id'])
+                return qb_player['id']
 
         # Late rounds: fill remaining needs by BPA (excluding QB if rules don't allow)
         if not self._should_draft_qb(team_roster):
             skill_players = [p for p in skill_players if p['position'] != 'QB']
 
         if skill_players:
-            return int(min(skill_players, key=lambda p: p['rank'])['id'])
+            return min(skill_players, key=lambda p: p['rank'])['id']
         return None
 
 
@@ -702,31 +702,31 @@ class ZeroRBStrategy(DraftStrategy):
             if wr_count < 3:
                 wr_player = self._get_best_player_at_position(skill_players, 'WR')
                 if wr_player and team_roster.can_fill_position(Position.WR):
-                    return int(wr_player['id'])
+                    return wr_player['id']
 
             if te_count < 2:
                 te_player = self._get_best_player_at_position(skill_players, 'TE')
                 if te_player and team_roster.can_fill_position(Position.TE):
-                    return int(te_player['id'])
+                    return te_player['id']
 
         # Get QB if needed (rounds 4-6) and rules allow
         if qb_count == 0 and 4 <= current_round <= 6 and self._should_draft_qb(team_roster):
             qb_player = self._get_best_player_at_position(skill_players, 'QB')
             if qb_player and team_roster.can_fill_position(Position.QB):
-                return int(qb_player['id'])
+                return qb_player['id']
 
         # Round 6+: start taking RBs
         if current_round >= 6 and rb_count < 2:
             rb_player = self._get_best_player_at_position(skill_players, 'RB')
             if rb_player and team_roster.can_fill_position(Position.RB):
-                return int(rb_player['id'])
+                return rb_player['id']
 
         # Fill remaining needs by BPA (excluding QB if rules don't allow)
         if not self._should_draft_qb(team_roster):
             skill_players = [p for p in skill_players if p['position'] != 'QB']
 
         if skill_players:
-            return int(min(skill_players, key=lambda p: p['rank'])['id'])
+            return min(skill_players, key=lambda p: p['rank'])['id']
         return None
 
 
@@ -759,30 +759,30 @@ class LateQBStrategy(DraftStrategy):
             if rb_count < 2:
                 rb_player = self._get_best_player_at_position(skill_players, 'RB')
                 if rb_player and team_roster.can_fill_position(Position.RB):
-                    return int(rb_player['id'])
+                    return rb_player['id']
 
             if wr_count < 3:
                 wr_player = self._get_best_player_at_position(skill_players, 'WR')
                 if wr_player and team_roster.can_fill_position(Position.WR):
-                    return int(wr_player['id'])
+                    return wr_player['id']
 
             if te_count < 1:
                 te_player = self._get_best_player_at_position(skill_players, 'TE')
                 if te_player and team_roster.can_fill_position(Position.TE):
-                    return int(te_player['id'])
+                    return te_player['id']
 
         # Round 8+: get QB if needed and rules allow
         if qb_count == 0 and current_round >= 8 and self._should_draft_qb(team_roster):
             qb_player = self._get_best_player_at_position(skill_players, 'QB')
             if qb_player and team_roster.can_fill_position(Position.QB):
-                return int(qb_player['id'])
+                return qb_player['id']
 
         # Fill remaining needs by BPA (excluding QB if rules don't allow)
         if not self._should_draft_qb(team_roster):
             skill_players = [p for p in skill_players if p['position'] != 'QB']
 
         if skill_players:
-            return int(min(skill_players, key=lambda p: p['rank'])['id'])
+            return min(skill_players, key=lambda p: p['rank'])['id']
         return None
 
 
@@ -812,25 +812,25 @@ class EarlyQBStrategy(DraftStrategy):
         if 2 <= current_round <= 4 and qb_count == 0 and self._should_draft_qb(team_roster):
             qb_player = self._get_best_player_at_position(skill_players, 'QB')
             if qb_player and team_roster.can_fill_position(Position.QB):
-                return int(qb_player['id'])
+                return qb_player['id']
 
         # After securing QB or if we can't draft QB, balance RB/WR
         if rb_count < 2:
             rb_player = self._get_best_player_at_position(skill_players, 'RB')
             if rb_player and team_roster.can_fill_position(Position.RB):
-                return int(rb_player['id'])
+                return rb_player['id']
 
         if wr_count < 3:
             wr_player = self._get_best_player_at_position(skill_players, 'WR')
             if wr_player and team_roster.can_fill_position(Position.WR):
-                return int(wr_player['id'])
+                return wr_player['id']
 
         # BPA for remaining picks (excluding QB if rules don't allow)
         if not self._should_draft_qb(team_roster):
             skill_players = [p for p in skill_players if p['position'] != 'QB']
 
         if skill_players:
-            return int(min(skill_players, key=lambda p: p['rank'])['id'])
+            return min(skill_players, key=lambda p: p['rank'])['id']
         return None
 
 
@@ -888,7 +888,7 @@ class BalancedStrategy(DraftStrategy):
                 best_score = composite_score
                 best_player = player
 
-        return int(best_player['id']) if best_player else None
+        return best_player['id'] if best_player else None
 
 
 # Strategy registry for easy access - updated with all strategies

@@ -2,7 +2,17 @@ import React, { useState, useMemo } from 'react';
 import { Users, Grid, List, Crown } from 'lucide-react';
 import { PlayerAvatar, FootballIcon } from './TeamVisual';
 
-const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames, players, draftedPlayers, draftStyle, numTeams, currentDraftPick, keepers = [] }) => {
+const TeamBoards = ({
+  teams,
+  currentTeam,
+  positionColors,
+  themeStyles,
+  teamNames,
+  players, // Now array of player objects
+  draftStyle,
+  numTeams,
+  currentDraftPick
+}) => {
   const [viewMode, setViewMode] = useState('teams'); // 'teams' or 'grid'
 
   // Calculate which team drafted each pick
@@ -16,13 +26,18 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
     return position + 1;
   };
 
+  // Get all drafted and keeper players
+  const draftedAndKeeperPlayers = useMemo(() => {
+    return players.filter(p => p.status === 'drafted' || p.status === 'keeper');
+  }, [players]);
+
   // Generate grid data for draft board - show all rounds with keeper support
   const gridData = useMemo(() => {
     const rounds = [];
 
     // Calculate the maximum number of rounds based on roster size
     const rosterSize = teams.length > 0 ? teams[0].roster.length : 15;
-    const totalRounds = rosterSize; // Show all possible rounds
+    const totalRounds = rosterSize;
 
     for (let round = 1; round <= totalRounds; round++) {
       const roundPicks = [];
@@ -31,44 +46,25 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
         let pickNumber;
 
         if (draftStyle === 'snake') {
-          // Snake draft logic
           if (round % 2 === 1) {
-            // Odd rounds: 1, 2, 3, ... numTeams
             pickNumber = (round - 1) * numTeams + teamIndex;
           } else {
-            // Even rounds: numTeams, numTeams-1, ..., 1
             pickNumber = (round - 1) * numTeams + (numTeams - teamIndex + 1);
           }
         } else {
-          // Linear draft
           pickNumber = (round - 1) * numTeams + teamIndex;
         }
 
-        // Get the team that makes this pick
         const draftingTeamId = getCurrentTeam(pickNumber);
         const draftingTeamName = teamNames[draftingTeamId] || `Team ${draftingTeamId}`;
 
-        // Check if this is a keeper pick
-        const keeper = keepers.find(k => k.pickNumber === pickNumber);
+        // Find player drafted at this pick
+        const draftedPlayer = draftedAndKeeperPlayers.find(p =>
+          p.draftInfo?.pickNumber === pickNumber
+        );
 
-        // Get the player drafted at this pick (either from draft or keeper)
-        let draftedPlayer = null;
-        let isKeeper = false;
-
-        if (keeper) {
-          // This is a keeper position
-          draftedPlayer = players.find(p => p.id === keeper.playerId);
-          isKeeper = true;
-        } else if (pickNumber <= draftedPlayers.length) {
-          // This is a regular drafted pick
-          const playerId = draftedPlayers[pickNumber - 1];
-          draftedPlayer = players.find(p => p.id === playerId);
-          isKeeper = false;
-        }
-
-        // Determine pick status
-        const isCurrentPick = pickNumber === currentDraftPick && !keeper;
-        const isPastPick = keeper || pickNumber < currentDraftPick;
+        const isCurrentPick = pickNumber === currentDraftPick && !draftedPlayer;
+        const isPastPick = !!draftedPlayer || pickNumber < currentDraftPick;
 
         roundPicks.push({
           pickNumber,
@@ -77,7 +73,7 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
           draftingTeamId,
           draftingTeamName,
           draftedPlayer,
-          isKeeper,
+          isKeeper: draftedPlayer?.status === 'keeper',
           isCurrentPick,
           isPastPick
         });
@@ -90,7 +86,7 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
     }
 
     return rounds;
-  }, [players, draftedPlayers, keepers, numTeams, draftStyle, currentDraftPick, teamNames, teams]);
+  }, [players, draftedAndKeeperPlayers, numTeams, draftStyle, currentDraftPick, teamNames, teams]);
 
   const getTeamStats = (team) => {
     const filledSlots = team.roster.filter(slot => slot.player).length;
@@ -281,7 +277,7 @@ const TeamBoards = ({ teams, currentTeam, positionColors, themeStyles, teamNames
     gridTable: {
       width: '100%',
       borderCollapse: 'collapse',
-      minWidth: `${numTeams * 10 + 80}px` // Ensure minimum width
+      minWidth: `${numTeams * 10 + 80}px`
     },
     gridHeaderRow: {
       backgroundColor: themeStyles.hover.background,

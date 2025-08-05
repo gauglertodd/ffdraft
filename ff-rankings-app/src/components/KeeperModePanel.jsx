@@ -5,14 +5,15 @@ const KeeperModePanel = ({
   isKeeperMode,
   setIsKeeperMode,
   keepers,
-  setKeepers,
+  addKeeper,
+  removeKeeper,
   players,
   numTeams,
   teamNames,
   draftStyle,
   themeStyles,
   getCurrentTeam,
-  draftPlayer
+  getPickNumber
 }) => {
   const [showAddKeeper, setShowAddKeeper] = useState(false);
   const [editingKeeper, setEditingKeeper] = useState(null);
@@ -21,11 +22,10 @@ const KeeperModePanel = ({
   const [selectedTeam, setSelectedTeam] = useState(1);
   const [selectedRound, setSelectedRound] = useState(1);
 
-  // Filter available players for keeper selection
+  // Filter available players for keeper selection (exclude already drafted/keeper players)
   const availablePlayersForKeepers = useMemo(() => {
-    const keeperPlayerIds = keepers.map(k => k.playerId);
-    return players.filter(p => !keeperPlayerIds.includes(p.id));
-  }, [players, keepers]);
+    return players.filter(p => p.status === 'available');
+  }, [players]);
 
   // Search filtered players
   const searchFilteredPlayers = useMemo(() => {
@@ -42,51 +42,19 @@ const KeeperModePanel = ({
       .sort((a, b) => a.rank - b.rank);
   }, [searchQuery, availablePlayersForKeepers]);
 
-  // Get pick number for a given team and round
-  const getPickNumber = (teamId, round) => {
-    if (draftStyle === 'snake') {
-      if (round % 2 === 1) {
-        // Odd rounds: team position is direct
-        return (round - 1) * numTeams + teamId;
-      } else {
-        // Even rounds: team position is reversed
-        return (round - 1) * numTeams + (numTeams - teamId + 1);
-      }
-    } else {
-      // Linear draft
-      return (round - 1) * numTeams + teamId;
-    }
-  };
-
-  // Get team that picks at a specific pick number
-  const getTeamAtPick = (pickNumber) => {
-    return getCurrentTeam(pickNumber);
-  };
-
   // Add or update keeper
   const handleSaveKeeper = () => {
     if (!selectedPlayer) return;
 
     const pickNumber = getPickNumber(selectedTeam, selectedRound);
-    const keeperData = {
-      id: editingKeeper ? editingKeeper.id : Date.now(),
-      playerId: selectedPlayer.id,
-      playerName: selectedPlayer.name,
-      playerPosition: selectedPlayer.position,
-      playerTeam: selectedPlayer.team,
-      playerRank: selectedPlayer.rank,
-      teamId: selectedTeam,
-      teamName: teamNames[selectedTeam] || `Team ${selectedTeam}`,
-      round: selectedRound,
-      pickNumber: pickNumber
-    };
 
-    draftPlayer(selectedPlayer.id);
     if (editingKeeper) {
-      setKeepers(prev => prev.map(k => k.id === editingKeeper.id ? keeperData : k));
-    } else {
-      setKeepers(prev => [...prev, keeperData]);
+      // Remove old keeper first
+      removeKeeper(editingKeeper.id);
     }
+
+    // Add new keeper
+    addKeeper(selectedPlayer.id, selectedTeam, selectedRound);
 
     // Reset form
     setEditingKeeper(null);
@@ -94,25 +62,20 @@ const KeeperModePanel = ({
     setSearchQuery('');
     setSelectedTeam(1);
     setSelectedRound(1);
+    setShowAddKeeper(false);
   };
 
   // Delete keeper
   const handleDeleteKeeper = (keeperId) => {
-    setKeepers(prev => prev.filter(k => k.id !== keeperId));
+    removeKeeper(keeperId);
   };
 
   // Start editing keeper
   const handleEditKeeper = (keeper) => {
     setEditingKeeper(keeper);
-    setSelectedPlayer({
-      id: keeper.playerId,
-      name: keeper.playerName,
-      position: keeper.playerPosition,
-      team: keeper.playerTeam,
-      rank: keeper.playerRank
-    });
-    setSelectedTeam(keeper.teamId);
-    setSelectedRound(keeper.round);
+    setSelectedPlayer(keeper);
+    setSelectedTeam(keeper.draftInfo?.teamId || 1);
+    setSelectedRound(keeper.draftInfo?.round || 1);
     setShowAddKeeper(true);
   };
 
@@ -128,7 +91,7 @@ const KeeperModePanel = ({
 
   // Sort keepers by pick number
   const sortedKeepers = useMemo(() => {
-    return [...keepers].sort((a, b) => a.pickNumber - b.pickNumber);
+    return [...keepers].sort((a, b) => (a.draftInfo?.pickNumber || 0) - (b.draftInfo?.pickNumber || 0));
   }, [keepers]);
 
   const styles = {
@@ -454,7 +417,7 @@ const KeeperModePanel = ({
                 <div style={styles.keeperInfo}>
                   <div style={styles.keeperPlayer}>
                     <div style={styles.keeperPlayerName}>
-                      {keeper.playerName}
+                      {keeper.name}
                     </div>
                     <div style={styles.keeperPlayerMeta}>
                       <span style={{
@@ -465,19 +428,19 @@ const KeeperModePanel = ({
                         fontSize: '11px',
                         fontWeight: '600'
                       }}>
-                        {keeper.playerPosition}
+                        {keeper.position}
                       </span>
-                      <span>{keeper.playerTeam}</span>
-                      <span>#{keeper.playerRank}</span>
+                      <span>{keeper.team}</span>
+                      <span>#{keeper.rank}</span>
                     </div>
                   </div>
 
                   <div style={styles.keeperDraft}>
                     <div style={styles.keeperDraftText}>
-                      Pick #{keeper.pickNumber}
+                      Pick #{keeper.draftInfo?.pickNumber}
                     </div>
                     <div style={styles.keeperDraftMeta}>
-                      Round {keeper.round} • {keeper.teamName}
+                      Round {keeper.draftInfo?.round} • {teamNames[keeper.draftInfo?.teamId] || `Team ${keeper.draftInfo?.teamId}`}
                     </div>
                   </div>
                 </div>

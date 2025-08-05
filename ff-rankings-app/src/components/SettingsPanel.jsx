@@ -17,6 +17,7 @@ const SettingsPanel = ({
   setAutoDraftSettings,
   isAutoDrafting,
   setIsAutoDrafting,
+  setIsDraftRunning,
   isDraftRunning,
   startDraftSequence,
   draftSpeed,

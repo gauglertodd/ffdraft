@@ -8,13 +8,13 @@ const UnifiedControlPanel = ({
   onNewCSV,
   searchQuery,
   setSearchQuery,
-  players,
+  players, // Now array of player objects instead of separate arrays
   draftPlayer,
   onRestartDraft,
   onSwitchCSV,
   onSaveDraft,
   onClearSavedState,
-  // Watch/Avoid functionality
+  // Watch/Avoid functionality - now working with unified state
   watchedPlayers,
   toggleWatchPlayer,
   isPlayerWatched,
@@ -53,7 +53,7 @@ const UnifiedControlPanel = ({
     'The Fantasy Headliners PPR.csv'
   ];
 
-  // Filter players for search dropdown
+  // Filter players for search dropdown - now works with unified state
   useEffect(() => {
     if (searchQuery.length >= 2) {
       const searchLower = searchQuery.toLowerCase();
@@ -61,9 +61,10 @@ const UnifiedControlPanel = ({
         .filter(player => {
           const matchesSearch = player.name.toLowerCase().includes(searchLower) ||
                               player.team.toLowerCase().includes(searchLower);
-          return matchesSearch && !draftedPlayers.includes(player.id);
+          return matchesSearch && player.status === 'available'; // Only show available players
         })
-        .slice(0, 8); // Increased to show more results
+        .slice(0, 8)
+        .sort((a, b) => a.rank - b.rank);
 
       setFilteredPlayers(matches);
       setIsDropdownOpen(matches.length > 0);
@@ -72,7 +73,7 @@ const UnifiedControlPanel = ({
       setFilteredPlayers([]);
       setIsDropdownOpen(false);
     }
-  }, [searchQuery, players, draftedPlayers]);
+  }, [searchQuery, players]);
 
   // Scan for CSV files
   const scanForCSVFiles = async () => {
@@ -343,7 +344,8 @@ const UnifiedControlPanel = ({
       borderBottom: `1px solid ${themeStyles.border}`,
       display: 'flex',
       alignItems: 'center',
-      gap: '8px'
+      gap: '8px',
+      transition: 'background-color 0.2s'
     },
     statusIndicator: {
       fontSize: '10px',
@@ -580,8 +582,17 @@ const UnifiedControlPanel = ({
                 {availableCSVs.map((preset) => (
                   <div
                     key={preset.filename}
-                    style={styles.optionItem}
+                    style={{
+                      ...styles.optionItem,
+                      ':hover': { backgroundColor: themeStyles.hover.background }
+                    }}
                     onClick={() => handlePresetLoad(preset.filename)}
+                    onMouseEnter={(e) => {
+                      e.target.style.backgroundColor = themeStyles.hover.background;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.backgroundColor = 'transparent';
+                    }}
                   >
                     <FileText size={16} />
                     <div>
@@ -599,15 +610,23 @@ const UnifiedControlPanel = ({
                   style={{
                     ...styles.optionItem,
                     color: '#2563eb',
-                    fontWeight: '500'
+                    fontWeight: '500',
+                    borderTop: `1px solid ${themeStyles.border}`,
+                    borderBottom: 'none'
                   }}
                   onClick={() => {
                     fileInputRef.current?.click();
                     setShowCSVOptions(false);
                   }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = '#eff6ff';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'transparent';
+                  }}
                 >
                   <Upload size={16} />
-                  Upload Custom CSV
+                  <div>Upload Custom CSV</div>
                 </div>
               </div>
             )}

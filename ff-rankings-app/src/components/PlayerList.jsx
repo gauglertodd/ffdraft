@@ -1,41 +1,43 @@
-// Updated PlayerList.jsx with Avoid Players feature
+// Completely rewritten PlayerList.jsx to work directly with unified player state
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { UserPlus, Eye, Sun, Moon, EyeOff, TrendingUp, X } from 'lucide-react';
 import { TeamVisual } from './TeamVisual';
 
 const PlayerList = ({
-  filteredPlayers,
-  activeTab,
-  setActiveTab,
-  positions,
-  draftedPlayers,
-  draftPlayer,
+  // Core unified state
+  players, // Object of all players
+  setPlayers, // Function to update players
+
+  // Search and filtering
   searchQuery,
   selectedPosition,
   setSelectedPosition,
-  playersByPosition,
-  positionColors,
   showDrafted,
   setShowDrafted,
+
+  // Draft function
+  draftPlayer,
+
+  // UI state
+  activeTab,
+  setActiveTab,
   isDarkMode,
   toggleTheme,
   themeStyles,
-  watchedPlayers,
-  toggleWatchPlayer,
-  isPlayerWatched,
+  positionColors,
+
+  // Watch/Avoid colors
   watchHighlightColor,
   setWatchHighlightColor,
   watchHighlightOpacity,
   setWatchHighlightOpacity,
-  avoidedPlayers,
-  toggleAvoidPlayer,
-  isPlayerAvoided,
   avoidHighlightColor,
   setAvoidHighlightColor,
   avoidHighlightOpacity,
   setAvoidHighlightOpacity,
-  getTierColor,
+
+  // Availability prediction
   showAvailabilityPrediction,
   setShowAvailabilityPrediction,
   predictionTrials,
@@ -43,45 +45,112 @@ const PlayerList = ({
   onPredictAvailability,
   isPredicting,
   lastPredictionTime,
-  availabilityPredictions
+  availabilityPredictions,
+
+  // Helpers
+  getTierColor
 }) => {
-  const [isCondensedMode, setIsCondensedMode] = React.useState(false);
+  const [isCondensedMode, setIsCondensedMode] = useState(false);
+
+  // Convert players object to array and sort by rank
+  const playerArray = useMemo(() => {
+    return Object.values(players).sort((a, b) => a.rank - b.rank);
+  }, [players]);
+
+  // Get unique positions
+  const positions = useMemo(() => {
+    const posSet = new Set(playerArray.map(p => p.position));
+    return ['ALL', ...Array.from(posSet).sort()];
+  }, [playerArray]);
+
+  // Group players by position with position ranks
+  const playersByPosition = useMemo(() => {
+    const byPosition = {};
+    positions.forEach(pos => {
+      if (pos === 'ALL') {
+        byPosition[pos] = playerArray;
+      } else {
+        const posPlayers = playerArray.filter(p => p.position === pos);
+        byPosition[pos] = posPlayers.map((player, index) => ({
+          ...player,
+          positionRank: index + 1
+        }));
+      }
+    });
+    return byPosition;
+  }, [playerArray, positions]);
+
+  // Filter players based on current criteria
+  const filteredPlayers = useMemo(() => {
+    const baseList = activeTab === 'overall' ? playerArray : (playersByPosition[activeTab] || []);
+    return baseList.filter(player => {
+      const matchesSearch = searchQuery === '' ||
+        player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        player.team.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesPosition = selectedPosition === 'ALL' || player.position === selectedPosition;
+      const matchesDrafted = showDrafted || player.status === 'available';
+      return matchesSearch && matchesPosition && matchesDrafted;
+    });
+  }, [playerArray, playersByPosition, activeTab, searchQuery, selectedPosition, showDrafted]);
+
+  // Watch/Avoid toggle functions
+  const toggleWatchPlayer = (playerId) => {
+    console.log('👁️ Toggle watch for player ID:', playerId);
+    setPlayers(prev => {
+      const player = prev[playerId];
+      if (!player) {
+        console.error('❌ Player not found for watch toggle:', playerId);
+        return prev;
+      }
+
+      const newWatchStatus = player.watchStatus === 'watched' ? null : 'watched';
+      console.log('✅ Setting watch status to:', newWatchStatus, 'for:', player.name);
+
+      return {
+        ...prev,
+        [playerId]: {
+          ...player,
+          watchStatus: newWatchStatus
+        }
+      };
+    });
+  };
+
+  const toggleAvoidPlayer = (playerId) => {
+    console.log('🚫 Toggle avoid for player ID:', playerId);
+    setPlayers(prev => {
+      const player = prev[playerId];
+      if (!player) {
+        console.error('❌ Player not found for avoid toggle:', playerId);
+        return prev;
+      }
+
+      const newWatchStatus = player.watchStatus === 'avoided' ? null : 'avoided';
+      console.log('✅ Setting avoid status to:', newWatchStatus, 'for:', player.name);
+
+      return {
+        ...prev,
+        [playerId]: {
+          ...player,
+          watchStatus: newWatchStatus
+        }
+      };
+    });
+  };
 
   // Generate tabs based on actual positions found in the data
   const getMainPositionTabs = () => {
-    // All possible main positions we want to show as tabs
     const possiblePositions = ['QB', 'RB', 'WR', 'TE', 'DST', 'K'];
-
-    // Debug: Log what positions we have
-    console.log('🔍 PlayerList positions array:', positions);
-    console.log('🔍 Checking for each position:');
-
-    // Filter to only include positions that actually exist in the data
-    // Note: positions array includes 'ALL' as first element, so we need to check the rest
-    const actualPositions = possiblePositions.filter(pos => {
-      const hasPosition = positions.includes(pos);
-      console.log(`  ${pos}: ${hasPosition ? '✅ found' : '❌ missing'}`);
-      return hasPosition;
-    });
-
-    console.log('📋 Final position tabs to show:', actualPositions);
-
-    // Check if we have the flex-eligible positions
+    const actualPositions = possiblePositions.filter(pos => positions.includes(pos));
     const hasFlexPositions = ['RB', 'WR', 'TE'].some(pos => positions.includes(pos));
 
-    // Always include overall, then the actual positions, then FLEX (if applicable), then skill positions combo
     const tabs = ['overall', ...actualPositions];
-
     if (hasFlexPositions) {
       tabs.push('FLEX');
     }
-
     tabs.push('skill-positions');
 
-    const finalTabs = tabs;
-    console.log('🎯 Complete tab list:', finalTabs);
-
-    return finalTabs;
+    return tabs;
   };
 
   const getTabLabel = (tab) => {
@@ -103,10 +172,10 @@ const PlayerList = ({
 
   // Availability prediction helper functions
   const getAvailabilityColor = (probability) => {
-    if (probability >= 0.8) return '#16a34a'; // Green - very likely available
-    if (probability >= 0.6) return '#ca8a04'; // Yellow - moderately likely
-    if (probability >= 0.4) return '#ea580c'; // Orange - less likely
-    return '#dc2626'; // Red - unlikely to be available
+    if (probability >= 0.8) return '#16a34a';
+    if (probability >= 0.6) return '#ca8a04';
+    if (probability >= 0.4) return '#ea580c';
+    return '#dc2626';
   };
 
   const getAvailabilityText = (probability) => {
@@ -128,7 +197,7 @@ const PlayerList = ({
       const matchesSearch = searchQuery === '' ||
         player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         player.team.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesDrafted = showDrafted || !draftedPlayers.includes(player.id);
+      const matchesDrafted = showDrafted || player.status === 'available';
       return matchesSearch && matchesDrafted;
     });
   };
@@ -144,19 +213,22 @@ const PlayerList = ({
         const matchesSearch = searchQuery === '' ||
           player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           player.team.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesDrafted = showDrafted || !draftedPlayers.includes(player.id);
+        const matchesDrafted = showDrafted || player.status === 'available';
         return matchesSearch && matchesDrafted;
       });
       allFlexPlayers = [...allFlexPlayers, ...filteredPosPlayers];
     });
 
-    // Sort by overall rank to maintain proper FLEX ranking
     return allFlexPlayers.sort((a, b) => a.rank - b.rank);
   };
 
-  // Helper function to determine player row styling based on watch/avoid status
-  const getPlayerRowStyle = (baseStyle, isDrafted, isWatched, isAvoided) => {
+  // Helper function to determine player row styling
+  const getPlayerRowStyle = (baseStyle, player) => {
     let style = { ...baseStyle };
+
+    const isDrafted = player.status !== 'available';
+    const isWatched = player.watchStatus === 'watched';
+    const isAvoided = player.watchStatus === 'avoided';
 
     if (isDrafted) {
       style.opacity = '0.5';
@@ -171,6 +243,12 @@ const PlayerList = ({
     }
 
     return style;
+  };
+
+  const handleDraftClick = (player) => {
+    console.log('🎯 Draft button clicked for:', player.name, 'ID:', player.id);
+    console.log('🔍 Full player object:', player);
+    draftPlayer(player.id);
   };
 
   const styles = {
@@ -378,8 +456,10 @@ const PlayerList = ({
       padding: '16px'
     },
     positionColumn: {
-      ...themeStyles.positionColumn,
-      borderRadius: '8px'
+      backgroundColor: themeStyles.card.backgroundColor,
+      border: `1px solid ${themeStyles.border}`,
+      borderRadius: '8px',
+      overflow: 'hidden'
     },
     positionHeader: {
       padding: '12px 16px',
@@ -595,21 +675,19 @@ const PlayerList = ({
               </div>
               <div style={styles.positionPlayersList}>
                 {positionPlayers.map((player) => {
-                  const isDrafted = draftedPlayers.includes(player.id);
+                  const isDrafted = player.status !== 'available';
                   const isUndrafted = !isDrafted;
-                  const isWatched = isPlayerWatched(player.id);
-                  const isAvoided = isPlayerAvoided(player.id);
+                  const isWatched = player.watchStatus === 'watched';
+                  const isAvoided = player.watchStatus === 'avoided';
 
                   return (
                     <div
                       key={player.id}
                       style={getPlayerRowStyle(
                         isCondensedMode ? styles.compactPlayerRowCondensed : styles.compactPlayerRow,
-                        isDrafted,
-                        isWatched,
-                        isAvoided
+                        player
                       )}
-                      onClick={isCondensedMode && isUndrafted ? () => draftPlayer(player.id) : undefined}
+                      onClick={isCondensedMode && isUndrafted ? () => handleDraftClick(player) : undefined}
                       title={isCondensedMode && isUndrafted ? `Draft ${player.name}` : undefined}
                     >
                       {/* Tier indicator */}
@@ -764,7 +842,7 @@ const PlayerList = ({
                                 <X size={12} />
                               </button>
                               <button
-                                onClick={() => draftPlayer(player.id)}
+                                onClick={() => handleDraftClick(player)}
                                 style={styles.compactDraftButton}
                               >
                                 Draft
@@ -806,10 +884,10 @@ const PlayerList = ({
     return (
       <div style={styles.playersList}>
         {playersToShow.map((player) => {
-          const isDrafted = draftedPlayers.includes(player.id);
+          const isDrafted = player.status !== 'available';
           const isUndrafted = !isDrafted;
-          const isWatched = isPlayerWatched(player.id);
-          const isAvoided = isPlayerAvoided(player.id);
+          const isWatched = player.watchStatus === 'watched';
+          const isAvoided = player.watchStatus === 'avoided';
 
           // For FLEX tab, show overall rank since we're mixing positions
           const displayRank = (activeTab === 'overall' || activeTab === 'FLEX') ? player.rank : (player.positionRank || player.rank);
@@ -819,9 +897,7 @@ const PlayerList = ({
               key={player.id}
               style={getPlayerRowStyle(
                 isCondensedMode ? styles.playerRowCondensed : styles.playerRow,
-                isDrafted,
-                isWatched,
-                isAvoided
+                player
               )}
             >
               {/* Tier indicator */}
@@ -854,6 +930,7 @@ const PlayerList = ({
                       {player.name}
                       {isWatched && <span style={{ marginLeft: '8px', fontSize: '14px' }}>👁️</span>}
                       {isAvoided && <span style={{ marginLeft: '8px', fontSize: '14px' }}>🚫</span>}
+                      {player.status === 'keeper' && <span style={{ marginLeft: '8px', fontSize: '14px', color: '#7c3aed' }}>👑</span>}
                     </div>
 
                     {!isCondensedMode && (
@@ -981,7 +1058,7 @@ const PlayerList = ({
                     </button>
                     {isCondensedMode ? (
                       <span
-                        onClick={() => draftPlayer(player.id)}
+                        onClick={() => handleDraftClick(player)}
                         style={{
                           ...styles.tierBadge,
                           backgroundColor: '#16a34a',
@@ -1003,7 +1080,7 @@ const PlayerList = ({
                       </span>
                     ) : (
                       <button
-                        onClick={() => draftPlayer(player.id)}
+                        onClick={() => handleDraftClick(player)}
                         style={{
                           ...styles.button,
                           ...styles.buttonSuccess
@@ -1017,7 +1094,9 @@ const PlayerList = ({
                 )}
 
                 {isDrafted && (
-                  <span style={styles.draftedLabel}>DRAFTED</span>
+                  <span style={styles.draftedLabel}>
+                    {player.status === 'keeper' ? 'KEEPER' : 'DRAFTED'}
+                  </span>
                 )}
               </div>
             </div>
