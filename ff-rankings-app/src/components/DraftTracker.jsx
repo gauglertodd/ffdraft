@@ -219,6 +219,24 @@ const DraftTrackerContent = () => {
   }, [players, currentDraftPick, numTeams, rosterSettings, autoDraftSettings, teamVariability,
       teamNames, draftStyle, isKeeperMode]);
 
+// Apply theme to document body - ADD THIS useEffect
+  useEffect(() => {
+    document.body.style.backgroundColor = themeStyles.container.backgroundColor;
+    document.body.style.color = themeStyles.text.primary;
+    document.body.style.minHeight = '100vh';
+
+    // Also apply to html element for full coverage
+    document.documentElement.style.backgroundColor = themeStyles.container.backgroundColor;
+
+    // Cleanup function to reset when component unmounts
+    return () => {
+      document.body.style.backgroundColor = '';
+      document.body.style.color = '';
+      document.body.style.minHeight = '';
+      document.documentElement.style.backgroundColor = '';
+    };
+  }, [themeStyles]);
+
 // Team mapping utilities for CSVs without team information
   const normalizePlayerName = (name) => {
     return name
