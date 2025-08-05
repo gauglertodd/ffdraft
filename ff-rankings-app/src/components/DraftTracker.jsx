@@ -1192,13 +1192,13 @@ const DraftTrackerContent = () => {
         case 'Escape':
           setShowQuickDraft(false);
           break;
-        case 'w':
+        case 'W':
           e.preventDefault();
           if (selectedPlayerIndex >= 0 && selectedPlayerIndex < totalUndrafted) {
             toggleWatchPlayer(quickDraftPlayers.undrafted[selectedPlayerIndex].id);
           }
           break;
-        case 'a':
+        case 'A':
           e.preventDefault();
           if (selectedPlayerIndex >= 0 && selectedPlayerIndex < totalUndrafted) {
             toggleAvoidPlayer(quickDraftPlayers.undrafted[selectedPlayerIndex].id);
@@ -1260,7 +1260,7 @@ const DraftTrackerContent = () => {
               )}
             </div>
             <div style={{ fontSize: '12px', color: themeStyles.text.muted }}>
-              <strong>Hotkeys:</strong> ↑↓ navigate • Enter draft • W watch • A avoid • Esc close
+              <strong>Hotkeys:</strong> ↑↓ navigate • Enter draft • Shift+W watch • Shift+A avoid • Esc close
             </div>
           </div>
 
@@ -1369,7 +1369,7 @@ const DraftTrackerContent = () => {
                             backgroundColor: isWatched ? watchHighlightColor : (isSelected ? 'rgba(255,255,255,0.2)' : themeStyles.button.secondary.backgroundColor),
                             color: isWatched ? '#ffffff' : (isSelected ? '#ffffff' : themeStyles.text.secondary)
                           }}
-                          title="Watch (W key)"
+                          title="Watch (Shift+W key)"
                         >
                           👁️
                         </button>
@@ -1391,7 +1391,7 @@ const DraftTrackerContent = () => {
                             backgroundColor: isAvoided ? avoidHighlightColor : (isSelected ? 'rgba(255,255,255,0.2)' : themeStyles.button.secondary.backgroundColor),
                             color: isAvoided ? '#ffffff' : (isSelected ? '#ffffff' : themeStyles.text.secondary)
                           }}
-                          title="Avoid (A key)"
+                          title="Avoid (Shift+A key)"
                         >
                           🚫
                         </button>
