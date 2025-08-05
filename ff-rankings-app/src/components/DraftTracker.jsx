@@ -219,54 +219,348 @@ const DraftTrackerContent = () => {
   }, [players, currentDraftPick, numTeams, rosterSettings, autoDraftSettings, teamVariability,
       teamNames, draftStyle, isKeeperMode]);
 
-  // CSV parsing - now creates unified player objects with stable IDs
-  const parseCSV = (csvText) => {
-    const lines = csvText.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+// Team mapping utilities for CSVs without team information
+  const normalizePlayerName = (name) => {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '') // Remove special characters
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim()
+      .replace(/\s/g, ''); // Remove all spaces for exact matching
+  };
 
-    const nameIndex = headers.findIndex(h => h.includes('name'));
-    const positionIndex = headers.findIndex(h => h.includes('position') || h.includes('pos'));
-    const teamIndex = headers.findIndex(h => h.includes('team'));
-    const rankIndex = headers.findIndex(h => h.includes('rank'));
-    const tierIndex = headers.findIndex(h => h.includes('tier'));
+  const fuzzyMatchPlayerName = (targetName, candidateName, threshold = 0.8) => {
+    const target = normalizePlayerName(targetName);
+    const candidate = normalizePlayerName(candidateName);
 
-    if (nameIndex === -1 || positionIndex === -1 || rankIndex === -1) {
-      throw new Error('CSV must contain name, position, and rank columns');
+    // Exact match
+    if (target === candidate) return 1.0;
+
+    // Check if one contains the other
+    if (target.includes(candidate) || candidate.includes(target)) {
+      return 0.9;
     }
 
+    // Simple similarity check
+    const longer = target.length > candidate.length ? target : candidate;
+    const shorter = target.length > candidate.length ? candidate : target;
+
+    if (longer.length === 0) return 1.0;
+
+    let matches = 0;
+    for (let i = 0; i < shorter.length; i++) {
+      if (longer.includes(shorter[i])) matches++;
+    }
+
+    const similarity = matches / longer.length;
+    return similarity >= threshold ? similarity : 0;
+  };
+
+  const createTeamMappingFromPreloadedCSVs = async () => {
+    const csvFiles = [
+      'FantasyPros 2025 PPR.csv',
+      '4for4 Underdog ADP.csv',
+      'BB10s ADP.csv',
+      'CBS ADP.csv',
+      'ESPN ADP.csv',
+      'FFPC ADP.csv',
+      'Y! ADP.csv',
+      'FantasyPros .5 PPR.csv',
+      'FantasyPros 2025 Top 10 Accurate Overall PPR.csv',
+      'FantasyNow+ PPR.csv',
+      'The Fantasy Headliners PPR.csv'
+    ];
+
+    const teamMapping = new Map();
+    let filesProcessed = 0;
+
+    console.log('🔍 Building team mapping from preloaded CSV files...');
+
+    // Column patterns for reference files
+    const COLUMN_PATTERNS = {
+      name: [
+        'name', 'player', 'playername', 'player_name', 'player name', 'full_name', 'fullname',
+        'full name', 'lastname', 'last_name', 'first_name', 'firstname'
+      ],
+      team: [
+        'team', 'tm', 'nfl_team', 'nfl team', 'franchise', 'club', 'organization',
+        'team_abbr', 'team abbr', 'team_abbreviation', 'team abbreviation', 'teamname', 'team_name'
+      ]
+    };
+
+    const findColumnIndex = (headers, patterns) => {
+      const normalizedHeaders = headers.map(h => h.trim().toLowerCase());
+
+      for (const pattern of patterns) {
+        const index = normalizedHeaders.findIndex(h =>
+          h === pattern.toLowerCase() ||
+          h.includes(pattern.toLowerCase()) ||
+          pattern.toLowerCase().includes(h)
+        );
+        if (index !== -1) {
+          return index;
+        }
+      }
+      return -1;
+    };
+
+    for (const filename of csvFiles) {
+      try {
+        const response = await fetch(`/${filename}`);
+        if (!response.ok) continue;
+
+        const csvText = await response.text();
+        const lines = csvText.trim().split('\n');
+        const headers = lines[0].split(',').map(h => h.trim());
+
+        const nameIndex = findColumnIndex(headers, COLUMN_PATTERNS.name);
+        const teamIndex = findColumnIndex(headers, COLUMN_PATTERNS.team);
+
+        if (nameIndex === -1 || teamIndex === -1) {
+          console.log(`⚠️ Skipping ${filename}: missing name or team columns`);
+          continue;
+        }
+
+        // Process each player in this reference file
+        lines.slice(1).forEach(line => {
+          const values = line.split(',').map(v => v.trim());
+          const playerName = values[nameIndex];
+          const playerTeam = values[teamIndex];
+
+          if (playerName && playerTeam) {
+            const normalizedName = normalizePlayerName(playerName);
+            if (!teamMapping.has(normalizedName)) {
+              teamMapping.set(normalizedName, playerTeam.toUpperCase());
+            }
+          }
+        });
+
+        filesProcessed++;
+        console.log(`✅ Processed ${filename} for team mapping`);
+
+      } catch (error) {
+        console.log(`❌ Failed to process ${filename}:`, error);
+      }
+    }
+
+    console.log(`📊 Team mapping complete: ${teamMapping.size} players from ${filesProcessed} files`);
+    return teamMapping;
+  };
+
+  const applyTeamMapping = async (playersWithoutTeams, sourceFilename = '') => {
+    if (playersWithoutTeams.length === 0) {
+      console.log('✅ No players need team mapping');
+      return { mappedCount: 0, unmappedPlayers: [] };
+    }
+
+    console.log(`🔄 Attempting to map teams for ${playersWithoutTeams.length} players...`);
+
+    const teamMapping = await createTeamMappingFromPreloadedCSVs();
+
+    if (teamMapping.size === 0) {
+      console.log('❌ No team mapping data available from preloaded CSVs');
+      return { mappedCount: 0, unmappedPlayers: playersWithoutTeams };
+    }
+
+    let mappedCount = 0;
+    const unmappedPlayers = [];
+
+    for (const player of playersWithoutTeams) {
+      let bestMatch = null;
+      let bestScore = 0;
+
+      // Try to find the best match in our team mapping
+      for (const [mappedName, team] of teamMapping.entries()) {
+        const score = fuzzyMatchPlayerName(player.name, mappedName);
+        if (score > bestScore && score >= 0.8) {
+          bestScore = score;
+          bestMatch = team;
+        }
+      }
+
+      if (bestMatch) {
+        player.team = bestMatch;
+        mappedCount++;
+        console.log(`✅ Mapped ${player.name} → ${bestMatch} (confidence: ${(bestScore * 100).toFixed(1)}%)`);
+      } else {
+        unmappedPlayers.push(player);
+        console.log(`❌ No team found for ${player.name}`);
+      }
+    }
+
+    console.log(`📊 Team mapping results: ${mappedCount} mapped, ${unmappedPlayers.length} unmapped`);
+
+    return { mappedCount, unmappedPlayers };
+  };
+
+  // Enhanced CSV parsing with flexible column detection and team mapping
+  const parseCSV = async (csvText, filename = '') => {
+    const lines = csvText.trim().split('\n');
+    const headers = lines[0].split(',').map(h => h.trim());
+
+    console.log('🔍 Parsing CSV with enhanced detection...');
+    console.log('📊 Headers found:', headers);
+
+    // Column patterns for flexible matching (case insensitive)
+    const COLUMN_PATTERNS = {
+      name: [
+        'name', 'player', 'playername', 'player_name', 'player name', 'full_name', 'fullname',
+        'full name', 'lastname', 'last_name', 'first_name', 'firstname'
+      ],
+      position: [
+        'position', 'pos', 'positions', 'player_position', 'player position', 'eligibility',
+        'eligible_positions', 'eligible positions', 'fantasy_position', 'fantasy position'
+      ],
+      team: [
+        'team', 'tm', 'nfl_team', 'nfl team', 'franchise', 'club', 'organization',
+        'team_abbr', 'team abbr', 'team_abbreviation', 'team abbreviation', 'teamname', 'team_name'
+      ],
+      rank: [
+        'rank', 'ranking', 'overall', 'overall_rank', 'overall rank', 'player_rank', 'player rank',
+        'draft_rank', 'draft rank', 'fantasy_rank', 'fantasy rank', 'ecr', 'consensus_rank',
+        'consensus rank', 'expert_consensus_rank', 'expert consensus rank', 'avg_rank', 'avg rank',
+        'average_rank', 'average rank', 'rk', 'rnk', 'position_rank', 'positional_rank'
+      ],
+      tier: [
+        'tier', 'tiers', 'draft_tier', 'draft tier', 'fantasy_tier', 'fantasy tier',
+        'tier_rank', 'tier rank', 'player_tier', 'player tier'
+      ]
+    };
+
+    // Find column index using flexible patterns
+    const findColumnIndex = (headers, patterns) => {
+      const normalizedHeaders = headers.map(h => h.trim().toLowerCase());
+
+      for (const pattern of patterns) {
+        const index = normalizedHeaders.findIndex(h =>
+          h === pattern.toLowerCase() ||
+          h.includes(pattern.toLowerCase()) ||
+          pattern.toLowerCase().includes(h)
+        );
+        if (index !== -1) {
+          console.log(`✅ Found ${pattern} column at index ${index}: "${headers[index]}"`);
+          return index;
+        }
+      }
+      return -1;
+    };
+
+    const nameIndex = findColumnIndex(headers, COLUMN_PATTERNS.name);
+    const positionIndex = findColumnIndex(headers, COLUMN_PATTERNS.position);
+    const teamIndex = findColumnIndex(headers, COLUMN_PATTERNS.team);
+    const rankIndex = findColumnIndex(headers, COLUMN_PATTERNS.rank);
+    const tierIndex = findColumnIndex(headers, COLUMN_PATTERNS.tier);
+
+    console.log('📍 Column mapping results:', {
+      name: nameIndex >= 0 ? `"${headers[nameIndex]}"` : 'NOT FOUND',
+      position: positionIndex >= 0 ? `"${headers[positionIndex]}"` : 'NOT FOUND',
+      team: teamIndex >= 0 ? `"${headers[teamIndex]}"` : 'NOT FOUND',
+      rank: rankIndex >= 0 ? `"${headers[rankIndex]}"` : 'NOT FOUND',
+      tier: tierIndex >= 0 ? `"${headers[tierIndex]}"` : 'NOT FOUND'
+    });
+
+    if (nameIndex === -1) {
+      throw new Error('CSV must contain a player name column. Expected headers like: name, player, playername, player_name, full_name, etc.');
+    }
+    if (positionIndex === -1) {
+      throw new Error('CSV must contain a position column. Expected headers like: position, pos, eligibility, fantasy_position, etc.');
+    }
+    if (rankIndex === -1) {
+      throw new Error('CSV must contain a rank column. Expected headers like: rank, overall, player_rank, draft_rank, ecr, etc.');
+    }
+
+    const hasTeamInfo = teamIndex !== -1;
+    console.log(hasTeamInfo ? '✅ Team information found in CSV' : '⚠️ No team information found - will attempt automatic mapping');
+
     const playersObj = {};
+    const playersWithoutTeams = [];
+
     lines.slice(1).forEach((line, index) => {
       const values = line.split(',').map(v => v.trim());
       const playerName = values[nameIndex] || '';
       const playerPosition = values[positionIndex] || '';
-      const playerTeam = teamIndex !== -1 ? values[teamIndex] || '' : '';
+      const playerTeam = hasTeamInfo ? (values[teamIndex] || '') : '';
+      const playerRank = parseInt(values[rankIndex]) || index + 1;
+      const playerTier = tierIndex !== -1 ? (parseInt(values[tierIndex]) || null) : null;
 
-      // Create stable ID based on name, position, and team to avoid shifting
+      if (!playerName || !playerPosition) {
+        console.warn(`⚠️ Skipping row ${index + 2}: missing name or position`);
+        return;
+      }
+
+      // Create initial stable ID
       const playerId = `${playerName.toLowerCase().replace(/[^a-z0-9]/g, '')}_${playerPosition.toLowerCase()}_${playerTeam.toLowerCase()}`.substring(0, 50);
 
-      playersObj[playerId] = {
+      const playerObj = {
         id: playerId,
         name: playerName,
-        position: playerPosition,
-        team: playerTeam,
-        rank: parseInt(values[rankIndex]) || index + 1,
-        tier: tierIndex !== -1 ? parseInt(values[tierIndex]) || null : null,
-        status: 'available', // 'available', 'drafted', 'keeper'
-        draftInfo: null, // { teamId, pickNumber, round, isKeeper }
-        watchStatus: null // 'watched', 'avoided', null
+        position: playerPosition.toUpperCase(),
+        team: playerTeam.toUpperCase(),
+        rank: playerRank,
+        tier: playerTier,
+        status: 'available',
+        draftInfo: null,
+        watchStatus: null
       };
+
+      playersObj[playerId] = playerObj;
+
+      // Track players without teams for mapping
+      if (!hasTeamInfo || !playerTeam) {
+        playersWithoutTeams.push(playerObj);
+      }
     });
 
+    // If we have players without teams, try to map them
+    if (playersWithoutTeams.length > 0) {
+      console.log(`🔄 Attempting to map teams for ${playersWithoutTeams.length} players...`);
+
+      try {
+        const mappingResult = await applyTeamMapping(playersWithoutTeams, filename);
+
+        if (mappingResult.mappedCount > 0) {
+          console.log(`✅ Successfully mapped ${mappingResult.mappedCount} players to teams`);
+
+          // Update the players object with mapped teams and new IDs
+          playersWithoutTeams.forEach(player => {
+            // Remove old ID
+            delete playersObj[player.id];
+
+            // Create new ID with team info
+            const newId = `${player.name.toLowerCase().replace(/[^a-z0-9]/g, '')}_${player.position.toLowerCase()}_${player.team.toLowerCase()}`.substring(0, 50);
+            player.id = newId;
+            playersObj[newId] = player;
+          });
+
+          // Show user-friendly notification about team mapping
+          const mappedPercentage = Math.round((mappingResult.mappedCount / playersWithoutTeams.length) * 100);
+          console.log(`🎯 Team mapping summary: ${mappingResult.mappedCount}/${playersWithoutTeams.length} players (${mappedPercentage}%) successfully mapped to teams`);
+        }
+
+        if (mappingResult.unmappedPlayers.length > 0) {
+          console.log(`⚠️ ${mappingResult.unmappedPlayers.length} players still without teams - they will show as blank teams`);
+        }
+      } catch (error) {
+        console.error('❌ Team mapping failed:', error);
+        console.log('📄 Continuing with original data (players without teams will have blank team fields)');
+      }
+    }
+
+    console.log(`📊 CSV parsing complete: ${Object.keys(playersObj).length} players loaded from "${filename}"`);
     return playersObj;
   };
 
-  // File upload handlers
+// File upload handlers - FIXED to properly handle async parseCSV
   const handleFileUpload = (file, isSwitch = false) => {
     if (file?.type === 'text/csv') {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
-          const parsedPlayers = parseCSV(e.target.result);
+          console.log('📁 Processing uploaded CSV file:', file.name);
+          const parsedPlayers = await parseCSV(e.target.result, file.name);
+          console.log('✅ CSV parsed successfully, players object:', parsedPlayers);
+          console.log('🔢 Number of players parsed:', Object.keys(parsedPlayers).length);
+
           setPlayers(parsedPlayers);
           setCurrentCSVSource(file.name);
 
@@ -277,7 +571,10 @@ const DraftTrackerContent = () => {
             setIsKeeperMode(false);
             clearDraftState();
           }
+
+          console.log('🎯 Players state updated, UI should now show draft interface');
         } catch (error) {
+          console.error('❌ CSV parsing error:', error);
           alert('Error parsing CSV: ' + error.message);
         }
       };
