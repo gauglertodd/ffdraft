@@ -62,7 +62,6 @@ const KeeperModePanel = ({
     setSearchQuery('');
     setSelectedTeam(1);
     setSelectedRound(1);
-    setShowAddKeeper(false);
   };
 
   // Delete keeper
