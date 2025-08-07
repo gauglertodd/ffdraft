@@ -946,17 +946,13 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     if (!isPyScriptReady) return null;
 
     try {
-      // Filter out avoided players before sending to PyScript
-      const nonAvoidedPlayers = availablePlayersList.filter(p => p.watchStatus !== 'avoided');
-      const playersToConsider = nonAvoidedPlayers.length > 0 ? nonAvoidedPlayers : availablePlayersList;
-
       const enhancedTeamRoster = {
         ...teamRoster,
         roster_requirements: rosterSettings
       };
 
       const resultJson = window.pyAutoDraft(
-        JSON.stringify(playersToConsider),
+        JSON.stringify(availablePlayersList),
         JSON.stringify(enhancedTeamRoster),
         strategy,
         variability
@@ -1010,6 +1006,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
         if (result?.player_id) {
           draftPlayer(result.player_id);
         } else {
+	    console.log("Falling Back - Error in autodraft strategy!");
           const fallbackPlayer = executeLocalFallback(availablePlayers, teamStrategy);
           if (fallbackPlayer) draftPlayer(fallbackPlayer);
         }
