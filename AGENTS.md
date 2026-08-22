@@ -35,6 +35,8 @@ fail (see *Gotchas*).
         ├── main.jsx        # React bootstrap
         ├── App.jsx
         ├── index.css
+        ├── rankings/
+        │   └── sources.js     # single source of truth for ranking boards
         └── components/
             ├── DraftTracker.jsx          # main board; CSV parser; team mapping; PyScript polling
             ├── PlayerList.jsx             # player grid (uses <TeamVisual> for team indicator)
@@ -101,26 +103,30 @@ uses `.includes()` (substring).
 ### Adding a new ranking source
 
 1. Drop the CSV into `ff-rankings-app/public/` (keep BOM + CRLF).
-2. Add its filename to **all three** hardcoded filename lists (below).
-3. For team mapping to apply, the file **must have a `Team` column** — the
-   `DraftTracker.jsx` list loop does `if (teamIndex === -1) continue`.
+2. Add one entry to `src/rankings/sources.js`:
+   `{ id, file, label, supportsTiers, positions, requiresTeamColumn }`.
+   That's it — all three consumers (`FileUpload`, `UnifiedControlPanel`,
+   `DraftTracker`) read from this registry.
+3. For team mapping to apply, set `requiresTeamColumn: true` and ensure the
+   CSV has a `Team` column (the team-mapping loop skips boards without one).
 
-The selector's UI label is the filename minus `.csv` (spaces preserved;
-underscores run through `generateFriendlyName`'s pattern replacement).
+The selector's UI label is the registry entry's `label` (with a fallback to
+the filename minus `.csv` for user-uploaded, non-registry files).
 
-### CRITICAL: keep three filename lists in sync
+### Ranking-source registry
 
-Three separate components hardcode the selectable ranking sources; they must
-match exactly or files won't appear / teams won't map:
+The selectable boards are defined **once** in `src/rankings/sources.js`
+(`RANKING_SOURCES`). It also derives:
 
-- `FileUpload.jsx` — `csvFilesToCheck` (~L13)
-- `UnifiedControlPanel.jsx` — `csvFiles` (~L42)
-- `DraftTracker.jsx` — `csvFiles` (~L415) — this one doubles as the
-  **team-mapping reference loop** (requires a `Team` column, builds a
-  normalized-name → team map).
+- `RANKING_FILES` — every board's filename (`FileUpload` and
+  `UnifiedControlPanel` scan `public/` with this list).
+- `TEAM_MAPPING_FILES` — boards with `requiresTeamColumn: true`, fed to
+  `DraftTracker`'s team-mapping reference loop.
+- `findSourceByFile` / `rankingLabel` — label resolution (registry `label`,
+  falling back to filename minus `.csv` for user-uploaded files).
 
-Currently all three equal:
-`['2026 Rankings.csv', 'FantasyPros 2026 Draft ALL Rankings.csv']`.
+The old "keep three filename lists in sync" hazard is gone — adding a board
+is now a single entry in `sources.js`.
 
 ### CSV writing (if regenerating from a source)
 

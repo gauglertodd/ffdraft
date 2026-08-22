@@ -8,6 +8,7 @@ import TeamBoards from './TeamBoards';
 import UnifiedControlPanel from './UnifiedControlPanel';
 import SettingsPanel from './SettingsPanel';
 import KeeperModePanel from './KeeperModePanel';
+import { TEAM_MAPPING_FILES } from '../rankings/sources';
 
 const DraftTrackerContent = () => {
   const { isDarkMode, toggleTheme, themeStyles } = useTheme();
@@ -412,10 +413,7 @@ const fuzzyMatchPlayerName = (targetName, candidateName, targetPosition = null, 
   };
 
 const createTeamMappingFromPreloadedCSVs = async () => {
-    const csvFiles = [
-      '2026 Rankings.csv',
-      'FantasyPros 2026 Draft ALL Rankings.csv',
-    ];
+    const csvFiles = TEAM_MAPPING_FILES;
 
     const teamMapping = new Map(); // Will store { normalizedName: { team, position } }
     let filesProcessed = 0;

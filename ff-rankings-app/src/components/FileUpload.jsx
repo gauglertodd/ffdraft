@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Upload, FileText, Info } from 'lucide-react';
+import { RANKING_FILES, rankingLabel } from '../rankings/sources';
 
 const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) => {
   const fileInputRef = useRef(null);
@@ -9,49 +10,6 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
   const [isScanning, setIsScanning] = useState(true);
   const [scanError, setScanError] = useState(null);
 
-  // Hardcoded list of CSV files to check for in public/ directory
-  const csvFilesToCheck = [
-    '2026 Rankings.csv',
-    'FantasyPros 2026 Draft ALL Rankings.csv',
-  ];
-
-  // Generate friendly names from filenames
-  const generateFriendlyName = (filename) => {
-    const nameWithoutExt = filename.replace('.csv', '');
-
-    // Handle files with spaces (keep as-is)
-    if (filename.includes(' ')) {
-      return nameWithoutExt;
-    }
-
-    // Handle common patterns with underscores
-    const patterns = [
-      { match: 'fantasypros_', replace: 'FantasyPros ' },
-      { match: 'espn_', replace: 'ESPN ' },
-      { match: 'yahoo_', replace: 'Yahoo ' },
-      { match: 'sleeper_', replace: 'Sleeper ' },
-      { match: 'sample_rankings', replace: 'Sample Rankings' },
-      { match: 'draft_rankings', replace: 'Draft Rankings' },
-      { match: 'player_rankings', replace: 'Player Rankings' },
-      { match: 'draft_board', replace: 'Draft Board' }
-    ];
-
-    let friendlyName = nameWithoutExt;
-
-    patterns.forEach(pattern => {
-      if (friendlyName.includes(pattern.match)) {
-        friendlyName = friendlyName.replace(pattern.match, pattern.replace);
-      }
-    });
-
-    // Replace remaining underscores with spaces and capitalize
-    return friendlyName
-      .replace(/_/g, ' ')
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
   // Scan for available CSV files in the public directory
   const scanForCSVFiles = async () => {
     setIsScanning(true);
@@ -59,10 +17,10 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
     const foundFiles = [];
 
     console.log('🔍 Scanning for CSV files in public directory...');
-    console.log(`Checking ${csvFilesToCheck.length} specific filenames...`);
+    console.log(`Checking ${RANKING_FILES.length} specific filenames...`);
 
     // Check each filename in our hardcoded list
-    for (const filename of csvFilesToCheck) {
+    for (const filename of RANKING_FILES) {
       try {
         const response = await fetch(`/${filename}`, { method: 'HEAD' });
         if (response.ok) {
@@ -77,7 +35,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
 
             foundFiles.push({
               filename,
-              name: generateFriendlyName(filename),
+              name: rankingLabel(filename),
               description: `${playerCount} players`,
               playerCount
             });
@@ -85,7 +43,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
             // If preview fails, still add the file with basic info
             foundFiles.push({
               filename,
-              name: generateFriendlyName(filename),
+              name: rankingLabel(filename),
               description: 'CSV file found',
               playerCount: null
             });
@@ -451,7 +409,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
         {isScanning && (
           <div style={styles.scanningMessage}>
             <div style={styles.scanningSpinner} />
-            Checking {csvFilesToCheck.length} potential filenames...
+            Checking {RANKING_FILES.length} potential filenames...
           </div>
         )}
 
@@ -469,7 +427,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
             <p>Place CSV files in your <code>public/</code> directory using supported filenames.</p>
             <p style={{ fontSize: '13px', marginTop: '12px', color: themeStyles.text.muted }}>
               <strong>Supported filenames:</strong><br/>
-              2026 Rankings.csv, FantasyPros 2026 Draft ALL Rankings.csv
+              {RANKING_FILES.join(', ')}
             </p>
           </div>
         )}

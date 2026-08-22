@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw, Save, Trash2, Plus, Eye, X, UserPlus, Crown } from 'lucide-react';
+import { RANKING_FILES, rankingLabel } from '../rankings/sources';
 
 const UnifiedControlPanel = ({
   themeStyles,
@@ -38,12 +39,6 @@ const UnifiedControlPanel = ({
   const [availableCSVs, setAvailableCSVs] = useState([]);
   const [isLoadingPreset, setIsLoadingPreset] = useState(false);
 
-  // Common CSV filenames to check for
-  const csvFiles = [
-    '2026 Rankings.csv',
-    'FantasyPros 2026 Draft ALL Rankings.csv',
-  ];
-
   // Filter players for search dropdown - now works with unified state
   useEffect(() => {
     if (searchQuery.length >= 2) {
@@ -69,13 +64,13 @@ const UnifiedControlPanel = ({
   // Scan for CSV files
   const scanForCSVFiles = async () => {
     const foundFiles = [];
-    for (const filename of csvFiles) {
+    for (const filename of RANKING_FILES) {
       try {
         const response = await fetch(`/${filename}`, { method: 'HEAD' });
         if (response.ok) {
           foundFiles.push({
             filename,
-            name: filename.replace('.csv', ''),
+            name: rankingLabel(filename),
             description: 'Available rankings'
           });
         }
