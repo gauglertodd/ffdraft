@@ -52,7 +52,7 @@ export function nameKey(name) {
     .join('');
 }
 
-function canonicalPosition(position) {
+export function canonicalPosition(position) {
   if (!position) return null;
   const p = String(position).toUpperCase().trim();
   return POSITION_ALIASES.get(p) || p;

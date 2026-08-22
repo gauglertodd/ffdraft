@@ -7,7 +7,7 @@
 // No React, no I/O, no mutation: everything returns new structures so the
 // live draft wiring can call these from a reducer/hook later.
 
-import { bestMatch, nameKey } from './matchPlayer.js';
+import { bestMatch, nameKey, canonicalPosition } from './matchPlayer.js';
 
 // Re-exported under the availability-flavored name for callers that think in
 // terms of "player identity" rather than "name match".
@@ -17,16 +17,23 @@ export const canonicalKey = nameKey;
 // Exact canonical key first; fuzzy bestMatch fallback. Returns
 // { identity, score, matchedBy } or null.
 export function resolveIdentity(player, identities, options = {}) {
-  const { threshold = 0.7 } = options;
+  const { threshold = 0.7, requirePositionMatch = false } = options;
   const pKey = nameKey(player.name);
+  const pPos = canonicalPosition(player.position);
 
   for (const id of identities) {
-    if (nameKey(id.name) === pKey) {
-      return { identity: id, score: 1, matchedBy: 'exact' };
+    if (nameKey(id.name) !== pKey) continue;
+    // Same canonical name. Under requirePositionMatch, a same-name entry at a
+    // different position (e.g. "Mike Williams" WR vs RB) is NOT the same player,
+    // so skip it and let the fuzzy path / other identities decide.
+    if (requirePositionMatch) {
+      const idPos = canonicalPosition(id.position);
+      if (pPos && idPos && pPos !== idPos) continue;
     }
+    return { identity: id, score: 1, matchedBy: 'exact' };
   }
 
-  const matched = bestMatch(player, identities, { threshold });
+  const matched = bestMatch(player, identities, { threshold, requirePositionMatch });
   return matched
     ? { identity: matched.match, score: matched.score, matchedBy: matched.matchedBy }
     : null;

@@ -152,16 +152,42 @@ spelling to the same player listed differently on another board. Pipeline:
 - `buildIdentities(boards)` — union of distinct canonical keys across boards
   (first spelling wins) — the grouping that lets one player be "available
   across all active rankings".
-- `resolveIdentity(player, identities)` — exact key first, fuzzy fallback.
+- `resolveIdentity(player, identities, {threshold, requirePositionMatch})` —
+  exact canonical key first, fuzzy fallback. Returns a **uniform**
+  `{identity, score, matchedBy}` (or `null`). Under `requirePositionMatch`
+  the exact-key loop also **skips same-name/different-position** entries
+  (so `Mike Williams` WR ≠ `Mike Williams` RB) before falling to fuzzy,
+  preventing cross-position collisions.
 - `isPlayerTaken(player, draftedIdentities)` — the "already drafted?" check.
 - `computeDraftedFlags(boards, draftedIdentities)` — derive each board's
   `drafted` bool from the global drafted-identity set; pure, returns new boards.
 
-These are **not yet wired** into the live autodraft path (`DraftTracker.jsx`
-state + `auto_draft_logic.py` bridge); that wiring is the next phase and will
-intercept a strategy-proposed pick → `resolveIdentity` against the associated
-ranking → `isPlayerTaken` against the global drafted set → push identity +
-`computeDraftedFlags` to propagate `drafted` across every active board.
+### Per-profile autodraft (live in `DraftTracker.jsx`)
+
+The autodraft now drafts **per-team** from each team's assigned ranking profile
+(SettingsPanel dropdown → `teamRankingProfile[teamId]`, falling back to
+`defaultRankingProfileId`, i.e. the board selected at UI start). The displayed
+board never changes.
+
+- On mount, every `RANKING_SOURCES` board is background-loaded into
+  `rankingProfileBoards[id]` (array of parsed players); the displayed `players`
+  is untouched.
+- `draftedIdentities` is derived from `draftedPlayers` (every pick — manual or
+  cross-profile — lands in `players` as drafted), so cross-board availability is
+  free: just filter `rankingProfileBoards[profile]` by `!isPlayerTaken(...,
+  draftedIdentities, { threshold:0.7, requirePositionMatch:true })`.
+- The autodraft effect routes on `assignedProfileId`:
+  - **default path** (profile = displayed board): unchanged single-board flow —
+    `callAutoDraftPyScript(availablePlayers, …)` → `draftPlayer(id)`.
+  - **per-profile path**: propose from the filtered profile board, then
+    `resolveIdentity(picked, availablePlayers, …)` back to the displayed board →
+    `draftPlayer(displayedId)`. If the pick has no displayed-board counterpart
+    (e.g. a K/DST only on the fuller board) it is inserted as a cross-profile
+    pick via `draftCrossProfilePick` (a new `players` entry, `id =
+    xprof_<profile>_<pickedId>`, marked drafted) so it still appears in the
+    roster and counts as globally drafted. Position is enforced strictly
+    (`requirePositionMatch: true`) on both the availability filter and the
+    displayed-board resolution.
 
 ### CSV writing (if regenerating from a source)
 

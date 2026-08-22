@@ -9,6 +9,7 @@ import UnifiedControlPanel from './UnifiedControlPanel';
 import SettingsPanel from './SettingsPanel';
 import KeeperModePanel from './KeeperModePanel';
 import { TEAM_MAPPING_FILES, RANKING_SOURCES, findSourceByFile } from '../rankings/sources';
+import { resolveIdentity, isPlayerTaken } from '../rankings/availability';
 
 const DraftTrackerContent = () => {
   const { isDarkMode, toggleTheme, themeStyles } = useTheme();
@@ -47,6 +48,9 @@ const DraftTrackerContent = () => {
   // for team T proposes from its assigned profile's board; the displayed board
   // stays fixed as the ranking selected at UI start (currentCSVSource).
   const [teamRankingProfile, setTeamRankingProfile] = useState({});
+  // Background-loaded boards for every registry ranking, keyed by profile id:
+  // { [id]: playerArray }. The autodraft consults a team's assigned profile here.
+  const [rankingProfileBoards, setRankingProfileBoards] = useState({});
   const [isAutoDrafting, setIsAutoDrafting] = useState(false);
   const [isDraftRunning, setIsDraftRunning] = useState(false);
   const [draftSpeed, setDraftSpeed] = useState('fast');
@@ -100,6 +104,14 @@ const DraftTrackerContent = () => {
   const playerArray = useMemo(() => Object.values(players), [players]);
   const availablePlayers = useMemo(() => playerArray.filter(p => p.status === 'available'), [playerArray]);
   const draftedPlayers = useMemo(() => playerArray.filter(p => p.status === 'drafted' || p.status === 'keeper'), [playerArray]);
+
+  // Global drafted set as identities. Every pick lands in `players` (manual or
+  // cross-profile), so this is the complete cross-board "already taken" set the
+  // per-profile autodraft filters candidates against.
+  const draftedIdentities = useMemo(
+    () => draftedPlayers.map(p => ({ name: p.name, position: p.position, team: p.team, id: p.id })),
+    [draftedPlayers]
+  );
 
   // Default profile = the ranking selected at UI start (the displayed board).
   // Per-team assignments fall back to this until the user picks one explicitly.
@@ -776,6 +788,27 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     setAvailabilityPredictions({});
   };
 
+  // Draft a player that exists ONLY on a non-displayed ranking board: inserts a
+  // brand-new entry into `players` as drafted (so it shows in the roster and
+  // counts as globally drafted) and advances the pick — the cross-profile
+  // mirror of draftPlayer for autodraft picks with no displayed-board match.
+  const draftCrossProfilePick = (player) => {
+    const round = Math.floor((currentDraftPick - 1) / numTeams) + 1;
+    const teamId = getCurrentTeam(currentDraftPick);
+    setPlayers(prev => ({
+      ...prev,
+      [player.id]: {
+        ...player,
+        status: 'drafted',
+        draftInfo: { teamId, pickNumber: currentDraftPick, round, isKeeper: false },
+      },
+    }));
+    let nextPick = currentDraftPick + 1;
+    while (keepers.some(k => k.draftInfo?.pickNumber === nextPick)) nextPick++;
+    setCurrentDraftPick(nextPick);
+    setAvailabilityPredictions({});
+  };
+
   const undoLastDraft = () => {
     // Find the most recent non-keeper pick
     const recentDraftedPlayers = draftedPlayers
@@ -966,6 +999,33 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     }
   };
 
+  // Background-load every registry ranking board so a per-profile autodraft can
+  // propose from a team's assigned ranking even when it isn't the displayed
+  // board. The displayed `players` is untouched — these live only in
+  // rankingProfileBoards. Loads once on mount; a failed load degrades to an
+  // empty board (the per-profile path then just has no candidates).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const boards = {};
+      for (const src of RANKING_SOURCES) {
+        if (boards[src.id]) continue;
+        try {
+          const res = await fetch(`/${src.file}`);
+          if (!res.ok) continue;
+          const text = await res.text();
+          const obj = await parseCSV(text, src.file);
+          boards[src.id] = Object.values(obj);
+          console.log(`📋 Loaded ranking profile board: ${src.label} (${boards[src.id].length} players)`);
+        } catch (e) {
+          console.warn(`⚠️ Could not load ranking profile "${src.id}" (${src.file}):`, e);
+        }
+      }
+      if (!cancelled && Object.keys(boards).length) setRankingProfileBoards(boards);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Updated auto-draft execution to skip keeper picks
   useEffect(() => {
     if (!isPyScriptReady || !isAutoDrafting || Object.keys(players).length === 0 || isDraftRunning) return;
@@ -996,30 +1056,93 @@ const createTeamMappingFromPreloadedCSVs = async () => {
 
     const executeAutoDraft = async () => {
       const currentTeamData = teams.find(t => t.id === currentTeam);
-      if (!availablePlayers.length || !currentTeamData) return;
+      if (!currentTeamData) return;
 
+      const teamVar = teamVariability[currentTeam];
+      const actualVariability = teamVar !== undefined ? teamVar : 0.3;
+
+      // Which ranking does this team draft from? Default = the displayed board
+      // selected at UI start. Anything else routes through the per-profile path.
+      const assignedProfileId = teamRankingProfile[currentTeam] || defaultRankingProfileId;
+
+      // ── Default path: draft straight from the displayed board (unchanged). ──
+      if (!assignedProfileId || assignedProfileId === defaultRankingProfileId) {
+        if (!availablePlayers.length) return;
+        try {
+          const result = await callAutoDraftPyScript(availablePlayers, currentTeamData, teamStrategy, actualVariability);
+          if (result?.player_id) {
+            draftPlayer(result.player_id);
+          } else {
+            console.log("Falling Back - Error in autodraft strategy!");
+            const fallbackPlayer = executeLocalFallback(availablePlayers, teamStrategy);
+            if (fallbackPlayer) draftPlayer(fallbackPlayer);
+          }
+        } catch (error) {
+          console.error('Auto-draft error:', error);
+        }
+        return;
+      }
+
+      // ── Per-profile path: propose from the team's assigned ranking board,
+      //    excluding anyone already taken on ANY active board, then resolve the
+      //    pick back to the displayed board (soft match when names drift) so the
+      //    existing draftPlayer/UI/persistence flow is reused. A pick with no
+      //    displayed-board counterpart is recorded as a cross-profile pick. ──
       try {
-        const teamVar = teamVariability[currentTeam];
-        const actualVariability = teamVar !== undefined ? teamVar : 0.3;
+        const MATCH_OPTS = { threshold: 0.7, requirePositionMatch: true };
+        const profileBoard = rankingProfileBoards[assignedProfileId] || [];
+        const profileAvailable = profileBoard.filter(
+          p => p.status === 'available' && !isPlayerTaken(p, draftedIdentities, MATCH_OPTS)
+        );
 
-        const result = await callAutoDraftPyScript(availablePlayers, currentTeamData, teamStrategy, actualVariability);
+        if (!profileAvailable.length) {
+          // Profile exhausted (or board not loaded yet) — advance without a pick
+          // so the autodraft never stalls on this team.
+          console.warn(`🤔 Profile "${assignedProfileId}" has no candidates for team ${currentTeam}; advancing pick.`);
+          let nextPick = currentDraftPick + 1;
+          while (keepers.some(k => k.draftInfo?.pickNumber === nextPick)) nextPick++;
+          setCurrentDraftPick(nextPick);
+          return;
+        }
 
+        // Resolve a profile-board pick back to the displayed board (soft match);
+        // fall back to recording it as a cross-profile pick if it isn't listed.
+        const draftProfilePick = (picked) => {
+          if (!picked) return;
+          const resolved = resolveIdentity(picked, availablePlayers, MATCH_OPTS);
+          if (resolved?.identity) {
+            draftPlayer(resolved.identity.id);
+          } else {
+            draftCrossProfilePick({
+              ...picked,
+              id: `xprof_${assignedProfileId}_${picked.id}`,
+              status: 'available',
+              watchStatus: 'none',
+            });
+          }
+        };
+
+        const result = await callAutoDraftPyScript(profileAvailable, currentTeamData, teamStrategy, actualVariability);
         if (result?.player_id) {
-          draftPlayer(result.player_id);
+          const picked = profileAvailable.find(p => p.id === result.player_id)
+            || profileBoard.find(p => p.id === result.player_id);
+          draftProfilePick(picked);
         } else {
-	    console.log("Falling Back - Error in autodraft strategy!");
-          const fallbackPlayer = executeLocalFallback(availablePlayers, teamStrategy);
-          if (fallbackPlayer) draftPlayer(fallbackPlayer);
+          console.log("Falling Back - Error in autodraft strategy!");
+          const fbId = executeLocalFallback(profileAvailable, teamStrategy);
+          const picked = fbId ? (profileAvailable.find(p => p.id === fbId) || profileBoard.find(p => p.id === fbId)) : null;
+          if (picked) draftProfilePick(picked);
         }
       } catch (error) {
-        console.error('Auto-draft error:', error);
+        console.error('Auto-draft (per-profile) error:', error);
       }
     };
 
     const timer = setTimeout(executeAutoDraft, getDraftDelay());
     return () => clearTimeout(timer);
   }, [currentDraftPick, isAutoDrafting, autoDraftSettings, Object.keys(players).length,
-      draftedPlayers.length, isDraftRunning, draftStyle, numTeams, isPyScriptReady, teamVariability, keepers]);
+      draftedPlayers.length, isDraftRunning, draftStyle, numTeams, isPyScriptReady, teamVariability, keepers,
+      teamRankingProfile, defaultRankingProfileId, rankingProfileBoards]);
 
   // Availability prediction (updated for unified state)
   const predictPlayerAvailability = async (force = false) => {
