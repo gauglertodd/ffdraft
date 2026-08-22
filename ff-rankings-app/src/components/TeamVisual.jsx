@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 // Safe team colors (these are widely known and not trademarked)
 const TEAM_COLORS = {
@@ -36,8 +36,30 @@ const TEAM_COLORS = {
   'WAS': { primary: '#5A1414', secondary: '#FFB612' }
 };
 
+// NFL team abbreviations eligible for a logo indicator. Logos are loaded at
+// runtime from ESPN's public CDN (https://a.espncdn.com) — never bundled — so
+// the repo doesn't redistribute trademarked artwork. See `style="logo"`.
+const NFL_TEAMS = new Set([
+  'ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN',
+  'DET', 'GB', 'HOU', 'IND', 'JAX', 'JAC', 'KC', 'LAC', 'LAR', 'LV',
+  'MIA', 'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI', 'PIT', 'SEA', 'SF',
+  'TB', 'TEN', 'WAS'
+]);
+
+// ESPN's CDN keys are lowercased team abbreviations, but Jacksonville's
+// current logo is served under `jax` (our data uses JAC); map both to jax.
+const ESPN_KEY_OVERRIDES = { JAC: 'jax', JAX: 'jax' };
+
+const teamLogoUrl = (abbr) => {
+  const up = abbr.toUpperCase();
+  const key = ESPN_KEY_OVERRIDES[up] || up.toLowerCase();
+  return `https://a.espncdn.com/i/teamlogos/nfl/500/${key}.png`;
+};
+
 const TeamVisual = ({ teamAbbr, size = 'medium', style = 'helmet' }) => {
   const colors = TEAM_COLORS[teamAbbr?.toUpperCase()] || { primary: '#6B7280', secondary: '#9CA3AF' };
+
+  const [imgError, setImgError] = useState(false);
 
   const sizes = {
     small: 24,
@@ -96,28 +118,64 @@ const TeamVisual = ({ teamAbbr, size = 'medium', style = 'helmet' }) => {
     );
   }
 
+  // Colored chip; reused as the logo fallback (free agents, unknowns, or
+  // CDN load errors) and by `style="badge"`.
+  const renderBadge = () => (
+    <div
+      style={{
+        width: dimension,
+        height: dimension,
+        borderRadius: '8px',
+        background: colors.primary,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#ffffff',
+        fontSize: `${dimension * 0.35}px`,
+        fontWeight: 'bold',
+        textShadow: '1px 1px 2px rgba(0,0,0,0.3)',
+        border: `2px solid ${colors.secondary}`,
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+      }}
+    >
+      {teamAbbr?.toUpperCase() || '?'}
+    </div>
+  );
+
+  if (style === 'logo') {
+    const eligible = !imgError && teamAbbr && NFL_TEAMS.has(teamAbbr.toUpperCase());
+    if (eligible) {
+      return (
+        <div
+          style={{
+            width: dimension,
+            height: dimension,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}
+        >
+          <img
+            src={teamLogoUrl(teamAbbr)}
+            alt={teamAbbr}
+            title={teamAbbr}
+            loading="lazy"
+            onError={() => setImgError(true)}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain'
+            }}
+          />
+        </div>
+      );
+    }
+    return renderBadge();
+  }
+
   if (style === 'badge') {
-    return (
-      <div
-        style={{
-          width: dimension,
-          height: dimension,
-          borderRadius: '8px',
-          background: colors.primary,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#ffffff',
-          fontSize: `${dimension * 0.35}px`,
-          fontWeight: 'bold',
-          textShadow: '1px 1px 2px rgba(0,0,0,0.3)',
-          border: `2px solid ${colors.secondary}`,
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-        }}
-      >
-        {teamAbbr?.toUpperCase() || '?'}
-      </div>
-    );
+    return renderBadge();
   }
 
   // Default: simple circle

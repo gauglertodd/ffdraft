@@ -740,7 +740,7 @@ const PlayerList = ({
                                 <TeamVisual
                                   teamAbbr={player.team}
                                   size="small"
-                                  style="badge"
+                                  style="logo"
                                 />
                                 <span style={{ color: themeStyles.text.muted, fontSize: '10px' }}>
                                   #{player.rank} overall
@@ -773,7 +773,7 @@ const PlayerList = ({
                               <TeamVisual
                                 teamAbbr={player.team}
                                 size="small"
-                                style="badge"
+                                style="logo"
                               />
                               <span style={{ fontSize: '9px', color: themeStyles.text.muted }}>
                                 #{player.rank}
@@ -945,7 +945,7 @@ const PlayerList = ({
                         <TeamVisual
                           teamAbbr={player.team}
                           size="small"
-                          style="badge"
+                          style="logo"
                         />
                         {(activeTab !== 'overall' && activeTab !== 'FLEX') && (
                           <span style={{ marginLeft: '8px', color: themeStyles.text.muted }}>
@@ -989,7 +989,7 @@ const PlayerList = ({
                       <TeamVisual
                         teamAbbr={player.team}
                         size="small"
-                        style="badge"
+                        style="logo"
                       />
                       {(activeTab !== 'overall' && activeTab !== 'FLEX') && (
                         <span style={{ fontSize: '10px', color: themeStyles.text.muted }}>
