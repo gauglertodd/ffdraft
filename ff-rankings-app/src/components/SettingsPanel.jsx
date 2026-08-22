@@ -609,6 +609,9 @@ const SettingsPanel = ({
                 <option value="0.3">30% (Medium)</option>
                 <option value="0.5">50% (High)</option>
                 <option value="0.7">70% (Very High)</option>
+                <option value="0.8">80% (Extreme)</option>
+                <option value="0.9">90% (Wild)</option>
+                <option value="1.0">100% (Pure Chaos)</option>
               </select>
             </div>
           </div>
