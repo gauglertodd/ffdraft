@@ -442,7 +442,7 @@ const SettingsPanel = ({
                 e.target.value = '';
               }
             }}
-            style={styles.input}
+            style={{ ...styles.input, width: '100%', minWidth: 0, boxSizing: 'border-box' }}
           >
             <option value="">Select Ranking...</option>
             {(rankingProfiles || []).map(p => (
@@ -510,7 +510,7 @@ const SettingsPanel = ({
                   ...prev,
                   [teamId]: e.target.value
                 }))}
-                style={{ ...styles.input, marginBottom: '8px' }}
+                style={{ ...styles.input, marginBottom: '8px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}
               >
                 {(rankingProfiles || []).map(p => (
                   <option key={p.id} value={p.id}>{p.label}</option>
