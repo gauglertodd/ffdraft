@@ -112,15 +112,16 @@ trips via the autosave localStorage like any other field. Tags are scanned as
 whole words plus a few phrases/emoji (case-insensitive):
 
 - → `watched`: `watch`, `sleeper`, `target`, `must`, `stash`, `breakout`,
-  `buy`, `love`, `undervalued`, `gem`, `steal`, `value`, `must have`,
+  `draft`, `buy`, `love`, `undervalued`, `gem`, `steal`, `value`, `must have`,
   `must-have`, `must draft`, 🟢, ⭐, ✅
 - → `avoided`: `avoid`, `fade`, `bust`, `overvalued`, `overpaid`, `dnd`,
   `do not draft`, `don't draft`, 🔴, ⛔, 🚫
 
-If both a watch and an avoid tag appear, `watched` wins (matches the render
-priority). No note column or no recognized tag → `watchStatus` stays `null`,
-i.e. the no-note path is byte-for-byte unchanged. Single-letter `W`/`A` are
-intentionally **not** matched (`a` collides with the article "a").
+If both a watch and an avoid tag appear, `avoided` wins — an explicit avoid is
+the stronger signal and (unlike watch) excludes the player from the autodraft
+local fallback. No note column or no recognized tag → `watchStatus` stays
+`null`, i.e. the no-note path is byte-for-byte unchanged. Single-letter `W`/`A`
+are intentionally **not** matched (`a` collides with the article "a").
 
 ### Adding a new ranking source
 

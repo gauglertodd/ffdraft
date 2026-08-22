@@ -42,12 +42,13 @@ const splitCSVLine = (line) => {
 };
 
 // Parse a free-text note for watch/avoid tags. Returns 'watched' | 'avoided' | null.
-// watch wins if both are present (matches the render priority in PlayerList).
-//   watched: watch, sleeper, target, must, stash, breakout, buy, love, undervalued, gem, steal, value, 🟢, ⭐
+// avoid wins if both are present — an explicit avoid is the stronger signal and
+// (unlike watch) also excludes the player from the autodraft local fallback.
+//   watched: watch, sleeper, target, must, stash, breakout, draft, buy, love, undervalued, gem, steal, value, 🟢, ⭐
 //   avoided: avoid, fade, bust, overvalued, overpaid, dnd, "do not draft", "don't draft", 🔴, ⛔, 🚫
 const WATCH_WORDS = new Set([
   'watch', 'watched', 'watching', 'watchlist', 'sleeper', 'sleepers',
-  'target', 'targets', 'targeting', 'must', 'stash', 'breakout',
+  'target', 'targets', 'targeting', 'must', 'stash', 'breakout', 'draft', 'drafts',
   'buy', 'love', 'loved', 'undervalued', 'gem', 'steal', 'steals', 'value'
 ]);
 const AVOID_WORDS = new Set([
@@ -77,8 +78,8 @@ const parseNoteForWatchStatus = (note) => {
     if (AVOID_WORDS.has(w)) isAvoid = true;
   }
 
-  if (isWatch) return 'watched';
   if (isAvoid) return 'avoided';
+  if (isWatch) return 'watched';
   return null;
 };
 
