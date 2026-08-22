@@ -420,7 +420,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
       'ESPN ADP.csv',
       'FFPC ADP.csv',
       'Y! ADP.csv',
-      'FantasyPros .5 PPR.csv',
+      '2026 Rankings.csv',
       'FantasyPros 2025 Top 10 Accurate Overall PPR.csv',
       'FantasyNow+ PPR.csv',
       'The Fantasy Headliners PPR.csv'
