@@ -11,18 +11,9 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
 
   // Hardcoded list of CSV files to check for in public/ directory
   const csvFilesToCheck = [
-    'FantasyPros 2025 PPR.csv',
-    '4for4 Underdog ADP.csv',
-    'BB10s ADP.csv',
-    'CBS ADP.csv',
-    'ESPN ADP.csv',
-    'FFPC ADP.csv',
-    'Y! ADP.csv',
     '2026 Rankings.csv',
-    'FantasyPros 2025 Top 10 Accurate Overall PPR.csv',
-    'FantasyNow+ PPR.csv',
-    'The Fantasy Headliners PPR.csv'
-   ];
+    'FantasyPros 2026 Draft ALL Rankings.csv',
+  ];
 
   // Generate friendly names from filenames
   const generateFriendlyName = (filename) => {
@@ -477,8 +468,8 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
             <div style={styles.noFilesTitle}>No Pre-loaded Rankings Found</div>
             <p>Place CSV files in your <code>public/</code> directory using supported filenames.</p>
             <p style={{ fontSize: '13px', marginTop: '12px', color: themeStyles.text.muted }}>
-              <strong>Supported filenames include:</strong><br/>
-              FantasyPros 2025 PPR.csv, ESPN 2024.csv, Yahoo 2025 PPR.csv, sample_rankings.csv, and {csvFilesToCheck.length - 4} others.
+              <strong>Supported filenames:</strong><br/>
+              2026 Rankings.csv, FantasyPros 2026 Draft ALL Rankings.csv
             </p>
           </div>
         )}

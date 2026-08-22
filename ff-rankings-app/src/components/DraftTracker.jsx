@@ -413,17 +413,8 @@ const fuzzyMatchPlayerName = (targetName, candidateName, targetPosition = null, 
 
 const createTeamMappingFromPreloadedCSVs = async () => {
     const csvFiles = [
-      'FantasyPros 2025 PPR.csv',
-      '4for4 Underdog ADP.csv',
-      'BB10s ADP.csv',
-      'CBS ADP.csv',
-      'ESPN ADP.csv',
-      'FFPC ADP.csv',
-      'Y! ADP.csv',
       '2026 Rankings.csv',
-      'FantasyPros 2025 Top 10 Accurate Overall PPR.csv',
-      'FantasyNow+ PPR.csv',
-      'The Fantasy Headliners PPR.csv'
+      'FantasyPros 2026 Draft ALL Rankings.csv',
     ];
 
     const teamMapping = new Map(); // Will store { normalizedName: { team, position } }
