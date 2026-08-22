@@ -100,6 +100,28 @@ header name, order-independent via `findColumnIndex`. Team column is
 `name_pos_team`. BOM in the first header field is tolerated because matching
 uses `.includes()` (substring).
 
+Rows are split with a quote-aware helper (`splitCSVLine`) rather than a naive
+`split(',')`, so a quoted field may contain commas (e.g. `"watch, sleeper"`).
+No existing CSV uses quoting, so this is a safe superset.
+
+**Optional note column.** A trailing `Note` / `Notes` / `Status` / `Remark` /
+`Remarks` column (matched by the same fuzzy header logic) is parsed for
+watch/avoid tags that auto-set each player's `watchStatus`, turning on the
+existing watch/avoid highlight without manual toggling. `watchStatus` round-
+trips via the autosave localStorage like any other field. Tags are scanned as
+whole words plus a few phrases/emoji (case-insensitive):
+
+- → `watched`: `watch`, `sleeper`, `target`, `must`, `stash`, `breakout`,
+  `buy`, `love`, `undervalued`, `gem`, `steal`, `value`, `must have`,
+  `must-have`, `must draft`, 🟢, ⭐, ✅
+- → `avoided`: `avoid`, `fade`, `bust`, `overvalued`, `overpaid`, `dnd`,
+  `do not draft`, `don't draft`, 🔴, ⛔, 🚫
+
+If both a watch and an avoid tag appear, `watched` wins (matches the render
+priority). No note column or no recognized tag → `watchStatus` stays `null`,
+i.e. the no-note path is byte-for-byte unchanged. Single-letter `W`/`A` are
+intentionally **not** matched (`a` collides with the article "a").
+
 ### Adding a new ranking source
 
 1. Drop the CSV into `ff-rankings-app/public/` (keep BOM + CRLF).

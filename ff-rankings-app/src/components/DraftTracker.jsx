@@ -11,6 +11,77 @@ import KeeperModePanel from './KeeperModePanel';
 import { TEAM_MAPPING_FILES, RANKING_SOURCES, findSourceByFile } from '../rankings/sources';
 import { resolveIdentity, isPlayerTaken } from '../rankings/availability';
 
+// Split a single CSV line respecting double-quoted fields (quoted fields may
+// contain commas; surrounding quotes are stripped; "" escapes to "). Comma-free
+// CSVs are a safe subset. Does not handle embedded newlines within quotes — the
+// caller splits on \n first, which the current data never contains.
+const splitCSVLine = (line) => {
+  const fields = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      fields.push(field);
+      field = '';
+    } else {
+      field += ch;
+    }
+  }
+  fields.push(field);
+  return fields.map(v => v.trim());
+};
+
+// Parse a free-text note for watch/avoid tags. Returns 'watched' | 'avoided' | null.
+// watch wins if both are present (matches the render priority in PlayerList).
+//   watched: watch, sleeper, target, must, stash, breakout, buy, love, undervalued, gem, steal, value, 🟢, ⭐
+//   avoided: avoid, fade, bust, overvalued, overpaid, dnd, "do not draft", "don't draft", 🔴, ⛔, 🚫
+const WATCH_WORDS = new Set([
+  'watch', 'watched', 'watching', 'watchlist', 'sleeper', 'sleepers',
+  'target', 'targets', 'targeting', 'must', 'stash', 'breakout',
+  'buy', 'love', 'loved', 'undervalued', 'gem', 'steal', 'steals', 'value'
+]);
+const AVOID_WORDS = new Set([
+  'avoid', 'avoided', 'avoiding', 'fade', 'faded', 'fades',
+  'bust', 'busts', 'busted', 'overvalued', 'overpaid', 'dnd'
+]);
+const WATCH_PHRASES = ['must have', 'must-have', 'must draft', 'must get'];
+const AVOID_PHRASES = ['do not draft', "don't draft", 'dont draft', 'over valued', 'over-valued'];
+
+const parseNoteForWatchStatus = (note) => {
+  if (!note) return null;
+  const raw = String(note);
+  const lower = raw.toLowerCase();
+  const words = new Set((lower.match(/[a-z0-9]+/g) || []));
+
+  let isWatch = false;
+  let isAvoid = false;
+
+  if (raw.includes('🟢') || raw.includes('⭐') || raw.includes('✅')) isWatch = true;
+  if (raw.includes('🔴') || raw.includes('⛔') || raw.includes('🚫')) isAvoid = true;
+
+  if (WATCH_PHRASES.some(p => lower.includes(p))) isWatch = true;
+  if (AVOID_PHRASES.some(p => lower.includes(p))) isAvoid = true;
+
+  for (const w of words) {
+    if (WATCH_WORDS.has(w)) isWatch = true;
+    if (AVOID_WORDS.has(w)) isAvoid = true;
+  }
+
+  if (isWatch) return 'watched';
+  if (isAvoid) return 'avoided';
+  return null;
+};
+
 const DraftTrackerContent = () => {
   const { isDarkMode, toggleTheme, themeStyles } = useTheme();
 
@@ -527,7 +598,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
   // Enhanced CSV parsing with flexible column detection and team mapping
   const parseCSV = async (csvText, filename = '') => {
     const lines = csvText.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim());
+    const headers = splitCSVLine(lines[0]);
 
     console.log('🔍 Parsing CSV with enhanced detection...');
     console.log('📊 Headers found:', headers);
@@ -555,7 +626,8 @@ const createTeamMappingFromPreloadedCSVs = async () => {
       tier: [
         'tier', 'tiers', 'draft_tier', 'draft tier', 'fantasy_tier', 'fantasy tier',
         'tier_rank', 'tier rank', 'player_tier', 'player tier'
-      ]
+      ],
+      note: ['note', 'notes', 'status', 'remark', 'remarks']
     };
 
     // Find column index using flexible patterns
@@ -581,13 +653,15 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     const teamIndex = findColumnIndex(headers, COLUMN_PATTERNS.team);
     const rankIndex = findColumnIndex(headers, COLUMN_PATTERNS.rank);
     const tierIndex = findColumnIndex(headers, COLUMN_PATTERNS.tier);
+    const noteIndex = findColumnIndex(headers, COLUMN_PATTERNS.note);
 
     console.log('📍 Column mapping results:', {
       name: nameIndex >= 0 ? `"${headers[nameIndex]}"` : 'NOT FOUND',
       position: positionIndex >= 0 ? `"${headers[positionIndex]}"` : 'NOT FOUND',
       team: teamIndex >= 0 ? `"${headers[teamIndex]}"` : 'NOT FOUND',
       rank: rankIndex >= 0 ? `"${headers[rankIndex]}"` : 'NOT FOUND',
-      tier: tierIndex >= 0 ? `"${headers[tierIndex]}"` : 'NOT FOUND'
+      tier: tierIndex >= 0 ? `"${headers[tierIndex]}"` : 'NOT FOUND',
+      note: noteIndex >= 0 ? `"${headers[noteIndex]}"` : 'NOT FOUND'
     });
 
     if (nameIndex === -1) {
@@ -607,12 +681,13 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     const playersWithoutTeams = [];
 
     lines.slice(1).forEach((line, index) => {
-      const values = line.split(',').map(v => v.trim());
+      const values = splitCSVLine(line);
       const playerName = values[nameIndex] || '';
       const playerPosition = values[positionIndex] || '';
       const playerTeam = hasTeamInfo ? (values[teamIndex] || '') : '';
       const playerRank = parseInt(values[rankIndex]) || index + 1;
       const playerTier = tierIndex !== -1 ? (parseInt(values[tierIndex]) || null) : null;
+      const playerNote = noteIndex !== -1 ? (values[noteIndex] || '') : '';
 
       if (!playerName || !playerPosition) {
         console.warn(`⚠️ Skipping row ${index + 2}: missing name or position`);
@@ -631,7 +706,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
         tier: playerTier,
         status: 'available',
         draftInfo: null,
-        watchStatus: null
+        watchStatus: parseNoteForWatchStatus(playerNote)
       };
 
       playersObj[playerId] = playerObj;
