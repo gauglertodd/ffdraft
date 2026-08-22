@@ -128,6 +128,41 @@ The selectable boards are defined **once** in `src/rankings/sources.js`
 The old "keep three filename lists in sync" hazard is gone — adding a board
 is now a single entry in `sources.js`.
 
+### Player-name matching & cross-board availability
+
+`src/rankings/matchPlayer.js` is a **pure** soft-matching module (no React,
+no I/O) so the autodraft flow can resolve a player proposed under one board's
+spelling to the same player listed differently on another board. Pipeline:
+
+- `normalizeName` — NFD-strip diacritics, lowercase, punctuation→space, drop
+  `Jr`/`Sr`/`II`/`III`/`IV`/`V` suffix tokens, collapse whitespace. Preserves
+  token boundaries (unlike the old `normalizePlayerName` which concatenated
+  all spaces out).
+- `nameKey` — tokens sorted then concatenated: **reorder-insensitive** canonical
+  identity key. `Jaxon Smith-Njigba` and `Smith-Njigba Jaxon` share a key → exact.
+- `scoreNameMatch` — `max(editSim, tokenSim, containment)` over the keys,
+  with single-char token **initial** handling (`j` ↔ `jamarr`). Position/team
+  are **soft hints** (+0.05/+0.03 match, −0.15/−0.1 mismatch) by default; pass
+  `requirePositionMatch: true` for strict same-position use (team mapping).
+  Default threshold `0.7`.
+- `bestMatch` — best candidate at/above threshold, with `matchedBy: 'exact' | 'fuzzy'`.
+
+`src/rankings/availability.js` builds the cross-board model on top:
+
+- `buildIdentities(boards)` — union of distinct canonical keys across boards
+  (first spelling wins) — the grouping that lets one player be "available
+  across all active rankings".
+- `resolveIdentity(player, identities)` — exact key first, fuzzy fallback.
+- `isPlayerTaken(player, draftedIdentities)` — the "already drafted?" check.
+- `computeDraftedFlags(boards, draftedIdentities)` — derive each board's
+  `drafted` bool from the global drafted-identity set; pure, returns new boards.
+
+These are **not yet wired** into the live autodraft path (`DraftTracker.jsx`
+state + `auto_draft_logic.py` bridge); that wiring is the next phase and will
+intercept a strategy-proposed pick → `resolveIdentity` against the associated
+ranking → `isPlayerTaken` against the global drafted set → push identity +
+`computeDraftedFlags` to propagate `drafted` across every active board.
+
 ### CSV writing (if regenerating from a source)
 
 ```python
