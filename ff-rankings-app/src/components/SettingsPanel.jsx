@@ -29,6 +29,12 @@ const SettingsPanel = ({
   teamVariability,
   setTeamVariability,
 
+  // Per-team ranking-profile assignment
+  teamRankingProfile,
+  setTeamRankingProfile,
+  rankingProfiles,
+  defaultRankingProfileId,
+
   // Draft stats
   draftStats,
   draftedPlayers,
@@ -107,6 +113,22 @@ const SettingsPanel = ({
     }
     setAutoDraftSettings(newSettings);
   }, [numTeams, setAutoDraftSettings]);
+
+  const setAllTeamsRankingProfile = useCallback((profileId) => {
+    const newProfiles = {};
+    for (let i = 1; i <= numTeams; i++) newProfiles[i] = profileId;
+    setTeamRankingProfile(newProfiles);
+  }, [numTeams, setTeamRankingProfile]);
+
+  const randomizeAllRankingProfiles = useCallback(() => {
+    const ids = (rankingProfiles || []).map(p => p.id).filter(Boolean);
+    if (!ids.length) return;
+    const newProfiles = {};
+    for (let i = 1; i <= numTeams; i++) {
+      newProfiles[i] = ids[Math.floor(Math.random() * ids.length)];
+    }
+    setTeamRankingProfile(newProfiles);
+  }, [numTeams, rankingProfiles, setTeamRankingProfile]);
 
   const setAllTeamsVariability = useCallback((variability) => {
     const newVariability = {};
@@ -405,6 +427,30 @@ const SettingsPanel = ({
             <option value="randomize">🎲 Randomize All</option>
           </select>
         </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Set All Rankings</label>
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) {
+                if (e.target.value === 'randomize') {
+                  randomizeAllRankingProfiles();
+                } else {
+                  setAllTeamsRankingProfile(e.target.value);
+                }
+                e.target.value = '';
+              }
+            }}
+            style={styles.input}
+          >
+            <option value="">Select Ranking...</option>
+            {(rankingProfiles || []).map(p => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
+            <option value="randomize">🎲 Randomize All Rankings</option>
+          </select>
+        </div>
       </div>
 
       {/* Team Grid */}
@@ -455,6 +501,19 @@ const SettingsPanel = ({
               >
                 {strategies.map(strat => (
                   <option key={strat.value} value={strat.value}>{strat.label}</option>
+                ))}
+              </select>
+
+              <select
+                value={teamRankingProfile?.[teamId] || defaultRankingProfileId || ''}
+                onChange={(e) => setTeamRankingProfile(prev => ({
+                  ...prev,
+                  [teamId]: e.target.value
+                }))}
+                style={{ ...styles.input, marginBottom: '8px' }}
+              >
+                {(rankingProfiles || []).map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
                 ))}
               </select>
 

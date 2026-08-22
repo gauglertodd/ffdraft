@@ -8,7 +8,7 @@ import TeamBoards from './TeamBoards';
 import UnifiedControlPanel from './UnifiedControlPanel';
 import SettingsPanel from './SettingsPanel';
 import KeeperModePanel from './KeeperModePanel';
-import { TEAM_MAPPING_FILES } from '../rankings/sources';
+import { TEAM_MAPPING_FILES, RANKING_SOURCES, findSourceByFile } from '../rankings/sources';
 
 const DraftTrackerContent = () => {
   const { isDarkMode, toggleTheme, themeStyles } = useTheme();
@@ -43,6 +43,10 @@ const DraftTrackerContent = () => {
 
   // Auto-draft settings
   const [autoDraftSettings, setAutoDraftSettings] = useState({});
+  // Per-team ranking-profile assignment: { [teamId]: profileId }. The autodraft
+  // for team T proposes from its assigned profile's board; the displayed board
+  // stays fixed as the ranking selected at UI start (currentCSVSource).
+  const [teamRankingProfile, setTeamRankingProfile] = useState({});
   const [isAutoDrafting, setIsAutoDrafting] = useState(false);
   const [isDraftRunning, setIsDraftRunning] = useState(false);
   const [draftSpeed, setDraftSpeed] = useState('fast');
@@ -96,6 +100,13 @@ const DraftTrackerContent = () => {
   const playerArray = useMemo(() => Object.values(players), [players]);
   const availablePlayers = useMemo(() => playerArray.filter(p => p.status === 'available'), [playerArray]);
   const draftedPlayers = useMemo(() => playerArray.filter(p => p.status === 'drafted' || p.status === 'keeper'), [playerArray]);
+
+  // Default profile = the ranking selected at UI start (the displayed board).
+  // Per-team assignments fall back to this until the user picks one explicitly.
+  const defaultRankingProfileId = useMemo(() => {
+    const src = findSourceByFile(currentCSVSource);
+    return src ? src.id : (RANKING_SOURCES[0]?.id || '');
+  }, [currentCSVSource]);
   const watchedPlayers = useMemo(() => playerArray.filter(p => p.watchStatus === 'watched'), [playerArray]);
   const avoidedPlayers = useMemo(() => playerArray.filter(p => p.watchStatus === 'avoided'), [playerArray]);
   const keepers = useMemo(() => playerArray.filter(p => p.status === 'keeper'), [playerArray]);
@@ -132,7 +143,7 @@ const DraftTrackerContent = () => {
     try {
       const draftState = {
         players, currentDraftPick, numTeams, rosterSettings, positionColors, autoDraftSettings,
-        teamVariability, teamNames, draftStyle, currentCSVSource, watchHighlightColor,
+        teamRankingProfile, teamVariability, teamNames, draftStyle, currentCSVSource, watchHighlightColor,
         watchHighlightOpacity, avoidHighlightColor, avoidHighlightOpacity, isDarkMode,
         isKeeperMode, lastSaved: Date.now()
       };
@@ -191,6 +202,7 @@ const DraftTrackerContent = () => {
       if (savedState.rosterSettings !== undefined) setRosterSettings(savedState.rosterSettings);
       if (savedState.positionColors !== undefined) setPositionColors(savedState.positionColors);
       if (savedState.autoDraftSettings !== undefined) setAutoDraftSettings(savedState.autoDraftSettings);
+      if (savedState.teamRankingProfile !== undefined) setTeamRankingProfile(savedState.teamRankingProfile);
       if (savedState.teamVariability !== undefined) setTeamVariability(savedState.teamVariability);
       if (savedState.teamNames !== undefined) setTeamNames(savedState.teamNames);
       if (savedState.draftStyle !== undefined) setDraftStyle(savedState.draftStyle);
@@ -217,7 +229,7 @@ const DraftTrackerContent = () => {
       const timer = setTimeout(saveDraftState, 500);
       return () => clearTimeout(timer);
     }
-  }, [players, currentDraftPick, numTeams, rosterSettings, autoDraftSettings, teamVariability,
+  }, [players, currentDraftPick, numTeams, rosterSettings, autoDraftSettings, teamRankingProfile, teamVariability,
       teamNames, draftStyle, isKeeperMode]);
 
 // Apply theme to document body - ADD THIS useEffect
@@ -1815,6 +1827,10 @@ const createTeamMappingFromPreloadedCSVs = async () => {
             setTeamNames={setTeamNames}
             teamVariability={teamVariability}
             setTeamVariability={setTeamVariability}
+            teamRankingProfile={teamRankingProfile}
+            setTeamRankingProfile={setTeamRankingProfile}
+            rankingProfiles={RANKING_SOURCES}
+            defaultRankingProfileId={defaultRankingProfileId}
             draftStats={draftStats}
             draftedPlayers={draftedPlayers}
             players={playerArray}
