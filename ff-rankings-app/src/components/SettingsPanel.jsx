@@ -138,6 +138,17 @@ const SettingsPanel = ({
     setTeamVariability(newVariability);
   }, [numTeams, setTeamVariability]);
 
+  const randomizeAllVariability = useCallback(() => {
+    // Same bands the per-team slider and Set-All dropdown expose, so values
+    // snap cleanly to the 10% step without landing between ticks.
+    const buckets = [0, 0.2, 0.3, 0.5, 0.7, 0.8, 0.9, 1.0];
+    const newVariability = {};
+    for (let i = 1; i <= numTeams; i++) {
+      newVariability[i] = buckets[Math.floor(Math.random() * buckets.length)];
+    }
+    setTeamVariability(newVariability);
+  }, [numTeams, setTeamVariability]);
+
   const styles = {
     container: {
       ...themeStyles.card,
@@ -598,7 +609,12 @@ const SettingsPanel = ({
                 value=""
                 onChange={(e) => {
                   if (e.target.value) {
-                    setAllTeamsVariability(e.target.value);
+                    if (e.target.value === 'randomize') {
+                      randomizeAllVariability();
+                    } else {
+                      setAllTeamsVariability(e.target.value);
+                    }
+                    e.target.value = '';
                   }
                 }}
                 style={styles.input}
@@ -612,6 +628,7 @@ const SettingsPanel = ({
                 <option value="0.8">80% (Extreme)</option>
                 <option value="0.9">90% (Wild)</option>
                 <option value="1.0">100% (Pure Chaos)</option>
+                <option value="randomize">🎲 Randomize All</option>
               </select>
             </div>
           </div>
