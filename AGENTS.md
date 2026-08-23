@@ -29,8 +29,7 @@ fail (see *Gotchas*).
     │   ├── _headers
     │   ├── auto_draft_logic.py     # auto-draft engine (loaded by PyScript)
     │   ├── draft_strategies.py    # strategy definitions (loaded by PyScript)
-    │   ├── 2026 Rankings.csv                          # tiered board (250, QB/RB/WR/TE)
-    │   └── FantasyPros 2026 Draft ALL Rankings.csv    # comprehensive board (520, incl K/DST/FA)
+    │   └── *.csv                                       # ranking boards (see "Ranking data" below)
     └── src/
         ├── main.jsx        # React bootstrap
         ├── App.jsx
@@ -83,16 +82,20 @@ npm run dev          # -> http://localhost:5173
 
 ## Ranking data (CSV)
 
-App-standard schema: `Overall,Player,Position,Tier,Team`, written with a
+App-standard schema: `Overall,Player,Position,[Tier],Team` (Tier optional; e.g. ESPN has none), written with a
 UTF-8 BOM + CRLF line endings (the parser tolerates BOM, so keeping it is
 safest).
 
-Two selectable boards ship in `public/`:
+Selectable boards ship in `public/` (one `src/rankings/sources.js` entry each):
 
-| File | Players | Positions | Source |
+| File | Players | Positions | Source / notes |
 | --- | --- | --- | --- |
-| `2026 Rankings.csv` | 250 | QB/RB/WR/TE only | `RankingsTiersMarketScore_2026` (tiered draft board) |
-| `FantasyPros 2026 Draft ALL Rankings.csv` | 520 | QB/RB/WR/TE/K/DST (+19 FA) | `FantasyPros_2026_Draft_ALL_Rankings` (comprehensive) |
+| `2026 Rankings.csv` | 250 | QB/RB/WR/TE | `RankingsTiersMarketScore` — tiered; **no team column** |
+| `FantasyPros 2026 Draft ALL Rankings.csv` | 520 | QB/RB/WR/TE/K/DST | FantasyPros comprehensive — tiered |
+| `FantasyPros 2026 Top10 Draft.csv` | 528 | QB/RB/WR/TE/K/DST | FantasyPros Top 10 accurate draft experts — tiered |
+| `FantasyPros 2026 Top10 InSeason.csv` | 362 | QB/RB/WR/TE/K/DST | FantasyPros Top 10 accurate in-season experts — tiered |
+| `Yahoo PPR Rankings.csv` | 378 | QB/RB/WR/TE/K/DST | Yahoo expert PPR — tiered |
+| `ESPN 2026 PPR Top 300.csv` | 300 | QB/RB/WR/TE/K/DST | ESPN Draft Kit PPR Top 300 — **no tiers**; depth-suffix positions digit-stripped |
 
 CSV parser (`DraftTracker.jsx`, ~L440+): fuzzy `COLUMN_PATTERNS` matched by
 header name, order-independent via `findColumnIndex`. Team column is

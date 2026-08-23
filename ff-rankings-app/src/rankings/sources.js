@@ -4,7 +4,7 @@
 // of hardcoding filenames — adding a board is now a one-line change and the
 // three consumer lists can no longer drift out of sync.
 //
-// Schema (from public/*.csv): Overall,Player,Position,Tier,Team
+// Schema (from public/*.csv): Overall,Player,Position,[Tier],Team
 // (UTF-8 BOM + CRLF; see AGENTS.md "Ranking data".)
 
 export const RANKING_SOURCES = [
@@ -21,6 +21,38 @@ export const RANKING_SOURCES = [
     file: 'FantasyPros 2026 Draft ALL Rankings.csv',
     label: 'FantasyPros 2026 Draft ALL Rankings',
     supportsTiers: true,
+    positions: ['QB', 'RB', 'WR', 'TE', 'K', 'DST'],
+    requiresTeamColumn: true,
+  },
+  {
+    id: 'fantasypros-2026-all-top-10-draft-accuracy',
+    file: 'FantasyPros 2026 Top10 Draft.csv',
+    label: 'FantasyPros 2026 Top 10 Accurate Draft Experts',
+    supportsTiers: true,
+    positions: ['QB', 'RB', 'WR', 'TE', 'K', 'DST'],
+    requiresTeamColumn: true,
+  },
+  {
+    id: 'fantasypros-2026-all-top-10-in-season-accuracy',
+    file: 'FantasyPros 2026 Top10 InSeason.csv',
+    label: 'FantasyPros 2026 Top 10 Accurate InSeason Experts',
+    supportsTiers: true,
+    positions: ['QB', 'RB', 'WR', 'TE', 'K', 'DST'],
+    requiresTeamColumn: true,
+  },
+  {
+    id: 'Yahoo Experts',
+    file: 'Yahoo PPR Rankings.csv',
+    label: 'Yahoo Expert PPR Ranking',
+    supportsTiers: true,
+    positions: ['QB', 'RB', 'WR', 'TE', 'K', 'DST'],
+    requiresTeamColumn: true,
+  },
+  {
+    id: 'espn-2026-ppr-top-300',
+    file: 'ESPN 2026 PPR Top 300.csv',
+    label: 'ESPN 2026 PPR Top 300',
+    supportsTiers: false,
     positions: ['QB', 'RB', 'WR', 'TE', 'K', 'DST'],
     requiresTeamColumn: true,
   },
