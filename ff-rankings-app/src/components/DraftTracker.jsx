@@ -571,7 +571,12 @@ const createTeamMappingFromPreloadedCSVs = async () => {
           const values = line.split(',').map(v => v.trim());
           const playerName = values[nameIndex];
           const playerTeam = values[teamIndex];
-          const playerPosition = positionIndex !== -1 ? values[positionIndex] : null;
+          // Strip depth-chart digits in reference positions too, so the
+          // strict refPosition === targetPosition filter in applyTeamMapping
+          // still matches (e.g. ref WR1 == displayed WR after the parse fix).
+          const playerPosition = positionIndex !== -1
+            ? ((values[positionIndex] || '').replace(/\d+/g, '').trim() || null)
+            : null;
 
           if (playerName && playerTeam) {
             const normalizedName = normalizePlayerName(playerName);
@@ -684,7 +689,9 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     lines.slice(1).forEach((line, index) => {
       const values = splitCSVLine(line);
       const playerName = values[nameIndex] || '';
-      const playerPosition = values[positionIndex] || '';
+      // Strip positional/depth-chart digits (WR1, RB4, …) so suffixes don't
+      // break position filters, roster slots, player ids, or team mapping.
+      const playerPosition = (values[positionIndex] || '').replace(/\d+/g, '').trim();
       const playerTeam = hasTeamInfo ? (values[teamIndex] || '') : '';
       const playerRank = parseInt(values[rankIndex]) || index + 1;
       const playerTier = tierIndex !== -1 ? (parseInt(values[tierIndex]) || null) : null;

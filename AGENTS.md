@@ -104,6 +104,14 @@ Rows are split with a quote-aware helper (`splitCSVLine`) rather than a naive
 `split(',')`, so a quoted field may contain commas (e.g. `"watch, sleeper"`).
 No existing CSV uses quoting, so this is a safe superset.
 
+**Position digit-stripping.** The position field is stripped of digits at
+parse time — `WR1`/`RB4` become `WR`/`RB` — at BOTH read sites (the main board
+parse and the team-mapping reference loader). Depth-chart suffixes are ignored
+so that position filters, roster-slot matching, player ids, and the team-
+mapping strict `refPosition === targetPosition` filter all match on the base
+position. A no-op on existing data (`WR`, `RB`, `QB`, `TE`, `K`, `DST`, `FLEX`
+have no digits), so no regression for current boards.
+
 **Optional note column.** A trailing `Note` / `Notes` / `Status` / `Remark` /
 `Remarks` column (matched by the same fuzzy header logic) is parsed for
 watch/avoid tags that auto-set each player's `watchStatus`, turning on the
