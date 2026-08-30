@@ -6,7 +6,7 @@
 // roster config and draft progress.
 
 import React, { useState, useCallback, useRef } from 'react';
-import { Settings, Bot, Play, Pause, ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
+import { Settings, Bot, Play, Pause, ChevronDown, ChevronUp, Wand2, Dices } from 'lucide-react';
 import {
   Paper, Group, Stack, Text, Tabs, Select, TextInput, Slider,
   Button, Badge, Progress, SegmentedControl, Box, Divider,
@@ -401,6 +401,22 @@ const SettingsPanel = ({
           ]}
           w={200}
         />
+        <Button
+          variant="light"
+          color="grape"
+          leftSection={<Dices size={15} />}
+          onClick={() => {
+            randomizeAllStrategies();
+            randomizeAllRankingProfiles();
+            randomizeAllVariability();
+            toast.success('🎲 Randomized strategies, rankings, and variability for all teams.', {
+              description: 'Every team now drafts with a different personality. Re-roll as often as you like.',
+            });
+          }}
+          title="Randomize strategies, rankings, and variability for every team"
+        >
+          Randomize everything!
+        </Button>
       </Group>
 
       {/* Team cards */}
