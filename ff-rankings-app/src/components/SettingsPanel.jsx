@@ -1,18 +1,26 @@
-// Fixed SettingsPanel.jsx - resolve variability display mismatch and improve functionality
+// SettingsPanel - Mantine-native reskin.
+//
+// Visual language: Mantine Paper surfaces, Tabs, Selects, Slider, Switch,
+// Badge chips and Progress bars. All props/behavior identical to the
+// original: per-team strategy + ranking assignment, variability, detection,
+// roster config and draft progress.
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Settings, Bot, BarChart3, Play, Pause, ChevronUp, ChevronDown } from 'lucide-react';
+import React, { useState, useCallback, useRef } from 'react';
+import { Settings, Bot, Play, Pause, ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
+import {
+  Paper, Group, Stack, Text, Tabs, Select, TextInput, Slider,
+  Button, Badge, Progress, SegmentedControl, Box, Divider,
+} from '@mantine/core';
+import { toast } from 'sonner';
+import { UnmountCollapse } from './Modern';
 
 const SettingsPanel = ({
-  // League settings
   numTeams,
   setNumTeams,
   rosterSettings,
   setRosterSettings,
   positionColors,
   setPositionColors,
-
-  // Auto-draft settings
   autoDraftSettings,
   setAutoDraftSettings,
   isAutoDrafting,
@@ -28,23 +36,20 @@ const SettingsPanel = ({
   setTeamNames,
   teamVariability,
   setTeamVariability,
-
-  // Per-team ranking-profile assignment
   teamRankingProfile,
   setTeamRankingProfile,
   rankingProfiles,
   defaultRankingProfileId,
-
-  // Draft stats
+  detectAllTeams,
+  isDetecting,
+  inferredMeta,
   draftStats,
   draftedPlayers,
   players,
-
   themeStyles
 }) => {
   const [activeTab, setActiveTab] = useState('league');
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const inputRefs = useRef({});
 
   // Auto-draft strategies
@@ -60,26 +65,14 @@ const SettingsPanel = ({
     { value: 'hero_wr', label: 'Hero WR', description: 'Take elite WR early, then focus on RB/TE' },
     { value: 'zero_rb', label: 'Zero RB', description: 'Wait on RB while focusing on WR/TE early' },
     { value: 'late_qb', label: 'Late QB', description: 'Wait on QB until later rounds' },
-    { value: 'early_qb', label: 'Early QB', description: 'Secure elite QB early' }
+    { value: 'early_qb', label: 'Early QB', description: 'Secure elite QB early' },
+    { value: 'vbd', label: 'VBD', description: 'Value Based Drafting: most value above position baseline' },
+    { value: 'scarcity', label: 'Scarcity', description: 'Target positions about to dry up (run prevention)' },
+    { value: 'elite_te', label: 'Elite TE', description: 'Lock a top TE early, or punt the position' },
+    { value: 'upside', label: 'Upside', description: 'Safe early, tier-break fliers mid, RB/WR stash late' }
   ];
 
-  const tabs = [
-    { id: 'league', label: 'League', icon: Settings, description: 'Teams & Roster' },
-    { id: 'auto-draft', label: 'Auto-Draft', icon: Bot, description: 'Team Strategies' },
-    { id: 'progress', label: 'Progress', icon: BarChart3, description: 'Draft Stats' }
-  ];
-
-  // Initialize input refs for team names
-  useEffect(() => {
-    for (let i = 1; i <= numTeams; i++) {
-      if (!inputRefs.current[i]) {
-        inputRefs.current[i] = React.createRef();
-      }
-    }
-  }, [numTeams]);
-
-  // Auto-draft helper functions
-  const getStrategyStats = () => {
+  const strategyStats = () => {
     const autoTeams = Object.values(autoDraftSettings).filter(s => s && s !== 'manual').length;
     return { autoTeams, manualTeams: numTeams - autoTeams };
   };
@@ -89,7 +82,7 @@ const SettingsPanel = ({
   }, [setTeamNames]);
 
   const handleTeamNameBlur = useCallback((teamId) => {
-    const input = inputRefs.current[teamId]?.current;
+    const input = inputRefs.current[teamId];
     if (input) {
       const cleanName = input.value.trim() || `Team ${teamId}`;
       input.value = cleanName;
@@ -139,8 +132,6 @@ const SettingsPanel = ({
   }, [numTeams, setTeamVariability]);
 
   const randomizeAllVariability = useCallback(() => {
-    // Same bands the per-team slider and Set-All dropdown expose, so values
-    // snap cleanly to the 10% step without landing between ticks.
     const buckets = [0, 0.2, 0.3, 0.5, 0.7, 0.8, 0.9, 1.0];
     const newVariability = {};
     for (let i = 1; i <= numTeams; i++) {
@@ -149,574 +140,419 @@ const SettingsPanel = ({
     setTeamVariability(newVariability);
   }, [numTeams, setTeamVariability]);
 
-  const styles = {
-    container: {
-      ...themeStyles.card,
-      borderRadius: '8px',
-      marginBottom: '24px',
-      overflow: 'hidden'
-    },
-    header: {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '16px 24px',
-      backgroundColor: themeStyles.hover.background,
-      borderBottom: `1px solid ${themeStyles.border}`,
-      cursor: 'pointer'
-    },
-    headerTitle: {
-      fontSize: '18px',
-      fontWeight: '600',
-      color: themeStyles.text.primary,
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px'
-    },
-    statusBar: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '16px',
-      fontSize: '12px',
-      color: themeStyles.text.muted
-    },
-    expandButton: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      padding: '6px 12px',
-      borderRadius: '6px',
-      fontSize: '13px',
-      fontWeight: '500',
-      backgroundColor: themeStyles.button.secondary.backgroundColor,
-      color: themeStyles.button.secondary.color,
-      border: 'none',
-      cursor: 'pointer'
-    },
-    tabsContainer: {
-      display: 'flex',
-      backgroundColor: themeStyles.card.backgroundColor,
-      borderBottomWidth: '1px',
-      borderBottomStyle: 'solid',
-      borderBottomColor: themeStyles.border,
-      height: isExpanded ? 'auto' : '0',
-      overflow: 'hidden',
-      transition: 'all 0.3s ease'
-    },
-    tab: {
-      flex: 1,
-      padding: '16px 12px',
-      cursor: 'pointer',
-      borderBottomWidth: '3px',
-      borderBottomStyle: 'solid',
-      borderBottomColor: 'transparent',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: '6px',
-      minHeight: '85px'
-    },
-    tabActive: {
-      backgroundColor: themeStyles.hover.background,
-      borderBottomColor: '#2563eb'
-    },
-    content: {
-      maxHeight: isExpanded ? '1200px' : '0',
-      overflow: isExpanded ? 'visible' : 'hidden',
-      transition: 'max-height 0.3s ease',
-      padding: isExpanded ? '24px' : '0'
-    },
-    // Common form styles
-    grid: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-      gap: '16px',
-      marginBottom: '24px'
-    },
-    formGroup: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '4px'
-    },
-    label: {
-      fontSize: '12px',
-      fontWeight: '500',
-      color: themeStyles.text.secondary
-    },
-    input: {
-      ...themeStyles.input,
-      padding: '8px 12px',
-      borderRadius: '6px',
-      fontSize: '14px',
-      outline: 'none'
-    },
-    button: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      padding: '10px 16px',
-      borderRadius: '6px',
-      fontSize: '14px',
-      fontWeight: '500',
-      cursor: 'pointer',
-      border: 'none',
-      transition: 'all 0.2s'
-    }
-  };
+  const { autoTeams, manualTeams } = strategyStats();
+  const draftProgress = players.length > 0
+    ? Math.round((draftedPlayers.length / players.length) * 100)
+    : 0;
 
-  const { autoTeams, manualTeams } = getStrategyStats();
-  const draftProgress = players.length > 0 ? Math.round((draftedPlayers.length / players.length) * 100) : 0;
+  // ── League tab ──────────────────────────────────────────────────────
+  // Inline swatch grid state: which position's picker is open (null = none).
+  // Deliberately NOT a floating popover — the grid renders in normal layout
+  // flow under the row, so there is no portal, no transition, no positioning:
+  // nothing that can animate or "zoom".
+  const [openColorPicker, setOpenColorPicker] = useState(null);
 
-  // League Settings Content
+  const SWATCHES = [
+    '#ef4444', '#f59e0b', '#eab308', '#10b981',
+    '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6',
+    '#f97316', '#84cc16', '#06b6d4', '#6366f1',
+    '#64748b', '#0f172a', '#e2e8f0', '#ffffff',
+  ];
+
   const renderLeagueSettings = () => (
-    <div style={styles.grid}>
-      <div style={styles.formGroup}>
-        <label style={styles.label}>Teams</label>
-        <select
-          value={numTeams}
-          onChange={(e) => setNumTeams(parseInt(e.target.value))}
-          style={styles.input}
-        >
-          {[8, 10, 12, 14, 16].map(num => (
-            <option key={num} value={num}>{num}</option>
-          ))}
-        </select>
-      </div>
+    <Stack gap="md">
+      <Group align="flex-end" gap="md">
+        <Select
+          label="Teams"
+          value={String(numTeams)}
+          onChange={(v) => v && setNumTeams(parseInt(v))}
+          data={['8', '10', '12', '14', '16'].map(n => ({ value: n, label: `${n} teams` }))}
+          w={130}
+        />
+        <Divider orientation="vertical" style={{ alignSelf: 'stretch' }} />
+        <Text size="xs" c="dimmed">
+          Roster slots and position colors. Click a color chip to open the
+          palette below its row.
+        </Text>
+      </Group>
 
-      {Object.entries(rosterSettings).map(([position, count]) => (
-        <div key={position} style={styles.formGroup}>
-          <label style={styles.label}>{position}</label>
-          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-            <select
-              value={count}
-              onChange={(e) => setRosterSettings({
-                ...rosterSettings,
-                [position]: parseInt(e.target.value)
-              })}
-              style={{ ...styles.input, flex: '1' }}
-            >
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(num => (
-                <option key={num} value={num}>{num}</option>
-              ))}
-            </select>
-            <input
-              type="color"
-              value={positionColors[position]}
-              onChange={(e) => setPositionColors({
-                ...positionColors,
-                [position]: e.target.value
-              })}
-              style={{
-                width: '24px',
-                height: '24px',
-                border: 'none',
-                borderRadius: '3px',
-                cursor: 'pointer'
-              }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
+      <Stack gap={0}>
+        {Object.entries(rosterSettings).map(([position, count], idx, arr) => {
+          const isOpen = openColorPicker === position;
+          return (
+            <Box key={position}>
+              <Group
+                gap={6}
+                wrap="nowrap"
+                px={4}
+                py={4}
+                style={{
+                  borderBottom: idx < arr.length - 1 ? '1px solid var(--ffx-border)' : 'none',
+                }}
+              >
+                <Text size="xs" fw={700} w={44}>{position}</Text>
+                <Select
+                  value={String(count)}
+                  onChange={(v) => v !== null && setRosterSettings({
+                    ...rosterSettings,
+                    [position]: parseInt(v)
+                  })}
+                  data={Array.from({ length: 9 }, (_, n) => ({ value: String(n), label: String(n) }))}
+                  w={64}
+                  size="xs"
+                />
+                <Box
+                  onClick={() => setOpenColorPicker(isOpen ? null : position)}
+                  title={`${position} color — click to change`}
+                  style={{
+                    width: 30,
+                    height: 26,
+                    borderRadius: 6,
+                    backgroundColor: positionColors[position],
+                    border: '1px solid var(--ffx-border-strong)',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                />
+                <Text size="10px" c="dimmed" ff="monospace" style={{ userSelect: 'none' }}>
+                  {positionColors[position]}
+                </Text>
+              </Group>
+
+              {isOpen && (
+                <Group
+                  gap={6}
+                  p={8}
+                  mb={4}
+                  style={{
+                    backgroundColor: 'var(--ffx-surface-alt)',
+                    borderRadius: 8,
+                    border: '1px solid var(--ffx-border)',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  {SWATCHES.map(color => (
+                    <Box
+                      key={color}
+                      onClick={() => {
+                        setPositionColors({
+                          ...positionColors,
+                          [position]: color
+                        });
+                        setOpenColorPicker(null);
+                      }}
+                      title={color}
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 6,
+                        backgroundColor: color,
+                        border: positionColors[position] === color
+                          ? '2px solid var(--ffx-text)'
+                          : '1px solid var(--ffx-border-strong)',
+                        cursor: 'pointer',
+                      }}
+                    />
+                  ))}
+                </Group>
+              )}
+            </Box>
+          );
+        })}
+      </Stack>
+    </Stack>
   );
 
-  // Auto-Draft Settings Content
+  // ── Auto-Draft tab ─────────────────────────────────────────────────
   const renderAutoDraftSettings = () => (
-    <div>
-      {/* Main Controls */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '24px',
-        padding: '16px',
-        backgroundColor: themeStyles.hover.background,
-        borderRadius: '8px'
-      }}>
-        <div style={{ display: 'flex', gap: '16px' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: themeStyles.text.primary }}>{autoTeams}</div>
-            <div style={{ fontSize: '11px', color: themeStyles.text.secondary }}>Auto Teams</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: themeStyles.text.primary }}>{manualTeams}</div>
-            <div style={{ fontSize: '11px', color: themeStyles.text.secondary }}>Manual Teams</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{
-              fontSize: '20px',
-              fontWeight: '700',
-              color: isAutoDrafting ? '#16a34a' : themeStyles.text.muted
-            }}>
-              {isAutoDrafting ? 'ON' : 'OFF'}
-            </div>
-            <div style={{ fontSize: '11px', color: themeStyles.text.secondary }}>Auto-Draft</div>
-          </div>
-        </div>
+    <Stack gap="lg">
+      {/* Status + main controls */}
+      <Group justify="space-between" align="center" wrap="nowrap">
+        <Group gap="sm">
+          {[
+            { label: 'Auto Teams', value: autoTeams, color: 'var(--ffx-info)' },
+            { label: 'Manual Teams', value: manualTeams, color: 'var(--ffx-text-3)' },
+            { label: 'Auto-Draft', value: isAutoDrafting ? 'ON' : 'OFF', color: isAutoDrafting ? 'var(--ffx-accent)' : 'var(--ffx-text-3)' },
+          ].map(stat => (
+            <Paper key={stat.label} withBorder radius="md" px="sm" py={6} style={{ minWidth: 86 }}>
+              <Text size="lg" fw={700} c={stat.color} style={{ lineHeight: 1.2 }}>{stat.value}</Text>
+              <Text size="xs" c="dimmed">{stat.label}</Text>
+            </Paper>
+          ))}
+        </Group>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button
+        <Group gap="sm">
+          <Button
+            variant="light"
+            color="grape"
+            leftSection={<Wand2 size={15} />}
+            onClick={() => detectAllTeams && detectAllTeams()}
+            loading={isDetecting}
+            disabled={!detectAllTeams}
+          >
+            Auto-Detect
+          </Button>
+          <Button
+            color="teal"
+            variant="filled"
+            leftSection={<Play size={15} />}
             onClick={() => {
               if (autoTeams === 0) {
-                alert('Configure at least one team for auto-draft before starting.');
+                toast.warning('Configure at least one team for auto-draft before starting.');
                 return;
               }
               setIsAutoDrafting(true);
               startDraftSequence();
             }}
             disabled={isDraftRunning || autoTeams === 0}
-            style={{
-              ...styles.button,
-              backgroundColor: '#16a34a',
-              color: '#ffffff',
-              opacity: (isDraftRunning || autoTeams === 0) ? 0.5 : 1
-            }}
           >
-            <Play size={16} />
-            Start Auto-Draft
-          </button>
-
-          <button
+            Start
+          </Button>
+          <Button
+            color="orange"
+            variant="light"
+            leftSection={<Pause size={15} />}
             onClick={() => {
               setIsAutoDrafting(false);
               setIsDraftRunning(false);
             }}
             disabled={!isAutoDrafting && !isDraftRunning}
-            style={{
-              ...styles.button,
-              backgroundColor: '#f59e0b',
-              color: '#ffffff',
-              opacity: (!isAutoDrafting && !isDraftRunning) ? 0.5 : 1
-            }}
           >
-            <Pause size={16} />
-            Stop Auto-Draft
-          </button>
-        </div>
-      </div>
+            Stop
+          </Button>
+        </Group>
+      </Group>
 
-      {/* Global Settings - Basic */}
-      <div style={styles.grid}>
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Draft Speed</label>
-          <select value={draftSpeed} onChange={(e) => setDraftSpeed(e.target.value)} style={styles.input}>
-            <option value="instant">Instant</option>
-            <option value="fast">Fast (0.2s)</option>
-            <option value="normal">Normal (0.8s)</option>
-            <option value="slow">Slow (2s)</option>
-          </select>
-        </div>
+      {/* Global settings */}
+      <Group gap="md" align="flex-end" wrap="wrap">
+        <Select
+          label="Draft Speed"
+          value={draftSpeed}
+          onChange={(v) => v && setDraftSpeed(v)}
+          data={[
+            { value: 'instant', label: 'Instant' },
+            { value: 'fast', label: 'Fast (0.2s)' },
+            { value: 'normal', label: 'Normal (0.8s)' },
+            { value: 'slow', label: 'Slow (2s)' },
+          ]}
+          w={150}
+        />
+        <Box>
+          <Text size="xs" fw={600} mb={6} c="dimmed">Draft Style</Text>
+          <SegmentedControl
+            value={draftStyle}
+            onChange={setDraftStyle}
+            data={[
+              { value: 'snake', label: 'Snake' },
+              { value: 'linear', label: 'Linear' },
+            ]}
+            color="teal"
+          />
+        </Box>
+        <Select
+          label="Set All Strategies"
+          placeholder="Pick to apply..."
+          value={null}
+          onChange={(v) => {
+            if (!v) return;
+            if (v === 'randomize') randomizeAllStrategies();
+            else setAllTeamsStrategy(v);
+          }}
+          data={[
+            ...strategies.map(s => ({ value: s.value, label: s.label })),
+            { value: 'randomize', label: '🎲 Randomize All' },
+          ]}
+          w={210}
+        />
+        <Select
+          label="Set All Rankings"
+          placeholder="Pick to apply..."
+          value={null}
+          onChange={(v) => {
+            if (!v) return;
+            if (v === 'randomize') randomizeAllRankingProfiles();
+            else setAllTeamsRankingProfile(v);
+          }}
+          data={[
+            ...(rankingProfiles || []).map(p => ({ value: p.id, label: p.label })),
+            { value: 'randomize', label: '🎲 Randomize All Rankings' },
+          ]}
+          w={240}
+        />
+        <Select
+          label="Set All Variability"
+          placeholder="Pick to apply..."
+          value={null}
+          onChange={(v) => {
+            if (!v) return;
+            if (v === 'randomize') randomizeAllVariability();
+            else setAllTeamsVariability(v);
+          }}
+          data={[
+            { value: '0', label: '0% (Rigid)' },
+            { value: '0.2', label: '20% (Low)' },
+            { value: '0.3', label: '30% (Medium)' },
+            { value: '0.5', label: '50% (High)' },
+            { value: '0.7', label: '70% (Very High)' },
+            { value: '0.8', label: '80% (Extreme)' },
+            { value: '0.9', label: '90% (Wild)' },
+            { value: '1.0', label: '100% (Pure Chaos)' },
+            { value: 'randomize', label: '🎲 Randomize All' },
+          ]}
+          w={200}
+        />
+      </Group>
 
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Draft Style</label>
-          <select value={draftStyle} onChange={(e) => setDraftStyle(e.target.value)} style={styles.input}>
-            <option value="snake">Snake Draft</option>
-            <option value="linear">Linear Draft</option>
-          </select>
-        </div>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Set All Teams</label>
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) {
-                if (e.target.value === 'randomize') {
-                  randomizeAllStrategies();
-                } else {
-                  setAllTeamsStrategy(e.target.value);
-                }
-                e.target.value = '';
-              }
-            }}
-            style={styles.input}
-          >
-            <option value="">Select Strategy...</option>
-            {strategies.map(strategy => (
-              <option key={strategy.value} value={strategy.value}>{strategy.label}</option>
-            ))}
-            <option value="randomize">🎲 Randomize All</option>
-          </select>
-        </div>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Set All Rankings</label>
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) {
-                if (e.target.value === 'randomize') {
-                  randomizeAllRankingProfiles();
-                } else {
-                  setAllTeamsRankingProfile(e.target.value);
-                }
-                e.target.value = '';
-              }
-            }}
-            style={{ ...styles.input, width: '100%', minWidth: 0, boxSizing: 'border-box' }}
-          >
-            <option value="">Select Ranking...</option>
-            {(rankingProfiles || []).map(p => (
-              <option key={p.id} value={p.id}>{p.label}</option>
-            ))}
-            <option value="randomize">🎲 Randomize All Rankings</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Team Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '16px',
-        marginBottom: '24px'
-      }}>
+      {/* Team cards */}
+      <Box
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: 12,
+        }}
+      >
         {Array.from({ length: numTeams }, (_, i) => {
           const teamId = i + 1;
           const strategy = autoDraftSettings[teamId] || 'manual';
-          // Fix: Ensure we get actual value or default to 0.3, then convert to percentage
           const variabilityValue = teamVariability[teamId];
           const variability = (variabilityValue !== undefined ? variabilityValue : 0.3) * 100;
           const selectedStrategy = strategies.find(s => s.value === strategy);
+          const meta = inferredMeta?.[teamId];
 
           if (!inputRefs.current[teamId]) {
             inputRefs.current[teamId] = React.createRef();
           }
 
           return (
-            <div key={teamId} style={{
-              backgroundColor: themeStyles.hover.background,
-              border: `1px solid ${themeStyles.border}`,
-              borderRadius: '8px',
-              padding: '16px'
-            }}>
-              <input
-                ref={inputRefs.current[teamId]}
-                type="text"
-                defaultValue={teamNames[teamId] || `Team ${teamId}`}
-                onBlur={() => handleTeamNameBlur(teamId)}
-                style={{
-                  ...styles.input,
-                  marginBottom: '8px',
-                  fontWeight: '500'
-                }}
-              />
+            <Paper
+              key={teamId}
+              withBorder
+              radius="md"
+              p="sm"
+              style={{
+                backgroundColor: 'var(--ffx-surface-alt)',
+                borderColor: 'var(--ffx-border)',
+              }}
+            >
+              <Stack gap={6}>
+                <TextInput
+                  ref={inputRefs.current[teamId]}
+                  defaultValue={teamNames[teamId] || `Team ${teamId}`}
+                  onBlur={() => handleTeamNameBlur(teamId)}
+                  size="xs"
+                  variant="unstyled"
+                  placeholder={`Team ${teamId}`}
+                  styles={{ input: { fontWeight: 700, fontSize: 14, minHeight: 24 } }}
+                />
 
-              <select
-                value={strategy}
-                onChange={(e) => setAutoDraftSettings(prev => ({
-                  ...prev,
-                  [teamId]: e.target.value
-                }))}
-                style={{ ...styles.input, marginBottom: '8px' }}
-              >
-                {strategies.map(strat => (
-                  <option key={strat.value} value={strat.value}>{strat.label}</option>
-                ))}
-              </select>
+                <Select
+                  value={strategy}
+                  onChange={(v) => v && setAutoDraftSettings(prev => ({
+                    ...prev,
+                    [teamId]: v
+                  }))}
+                  data={strategies.map(s => ({ value: s.value, label: s.label }))}
+                  size="sm"
+                  styles={{ input: { backgroundColor: 'var(--ffx-overlay)' } }}
+                />
 
-              <select
-                value={teamRankingProfile?.[teamId] || defaultRankingProfileId || ''}
-                onChange={(e) => setTeamRankingProfile(prev => ({
-                  ...prev,
-                  [teamId]: e.target.value
-                }))}
-                style={{ ...styles.input, marginBottom: '8px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}
-              >
-                {(rankingProfiles || []).map(p => (
-                  <option key={p.id} value={p.id}>{p.label}</option>
-                ))}
-              </select>
+                <Select
+                  value={teamRankingProfile?.[teamId] || defaultRankingProfileId || ''}
+                  onChange={(v) => v && setTeamRankingProfile(prev => ({
+                    ...prev,
+                    [teamId]: v
+                  }))}
+                  data={(rankingProfiles || []).map(p => ({ value: p.id, label: p.label }))}
+                  size="sm"
+                  styles={{ input: { backgroundColor: 'var(--ffx-overlay)' } }}
+                />
 
-              <div style={{
-                fontSize: '11px',
-                color: themeStyles.text.muted,
-                marginBottom: '8px',
-                minHeight: '16px'
-              }}>
-                {selectedStrategy ? selectedStrategy.description : ''}
-              </div>
+                <Text size="xs" c="dimmed" mih={30} lh={1.4}>
+                  {selectedStrategy ? selectedStrategy.description : ''}
+                </Text>
 
-              {showAdvancedSettings && strategy !== 'manual' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ fontSize: '10px', color: themeStyles.text.muted, minWidth: '40px' }}>
-                    Var:
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="10"
-                    value={Math.round(variability)}
-                    onChange={(e) => setTeamVariability(prev => ({
-                      ...prev,
-                      [teamId]: parseInt(e.target.value) / 100
-                    }))}
-                    style={{ flex: 1, height: '4px', maxWidth: '80px' }}
-                  />
-                  <span style={{
-                    fontSize: '10px',
-                    color: themeStyles.text.muted,
-                    minWidth: '25px',
-                    textAlign: 'right'
-                  }}>
-                    {Math.round(variability)}%
-                  </span>
-                </div>
-              )}
-            </div>
+                {meta && (
+                  <Badge
+                    size="sm"
+                    variant="light"
+                    color={meta.confidence >= 0.6 ? 'teal' : meta.confidence >= 0.25 ? 'yellow' : 'gray'}
+                    leftSection="🔍"
+                    styles={{ section: { marginInlineEnd: 2 } }}
+                    title="Inferred from this team's actual picks. Override freely - the detection only pre-fills."
+                  >
+                    {meta.confidence >= 0.6 ? 'Strong' : meta.confidence >= 0.25 ? 'Weak' : 'Low'} match
+                    {meta.boardLabel ? ` · ${meta.boardLabel}` : ''}
+                    {typeof meta.meanGap === 'number' ? ` · ${Math.round(meta.meanGap)} dev` : ''}
+                  </Badge>
+                )}
+
+                {strategy !== 'manual' && (
+                  <Group gap={6} wrap="nowrap">
+                    <Text size="xs" c="dimmed" w={30}>Var</Text>
+                    <Slider
+                      min={0}
+                      max={100}
+                      step={10}
+                      value={Math.round(variability)}
+                      onChange={(v) => setTeamVariability(prev => ({
+                        ...prev,
+                        [teamId]: v / 100
+                      }))}
+                      label={(v) => `${v}%`}
+                      color="teal"
+                      size="sm"
+                      flex={1}
+                    />
+                    <Text size="xs" c="dimmed" w={32} ta="right">{Math.round(variability)}%</Text>
+                  </Group>
+                )}
+              </Stack>
+            </Paper>
           );
         })}
-      </div>
-
-      {/* Advanced Settings Toggle */}
-      <button
-        onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-        style={{
-          ...styles.button,
-          backgroundColor: themeStyles.button.secondary.backgroundColor,
-          color: themeStyles.button.secondary.color,
-          marginBottom: '16px'
-        }}
-      >
-        <Settings size={14} />
-        {showAdvancedSettings ? 'Hide' : 'Show'} Advanced Settings
-      </button>
-
-      {/* Advanced Settings - Only show when enabled */}
-      {showAdvancedSettings && (
-        <div style={{
-          backgroundColor: themeStyles.hover.background,
-          border: `1px solid ${themeStyles.border}`,
-          borderRadius: '8px',
-          padding: '16px',
-          marginTop: '16px'
-        }}>
-          <h4 style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            color: themeStyles.text.primary,
-            marginBottom: '12px',
-            marginTop: '0'
-          }}>
-            Advanced Variability Settings
-          </h4>
-
-          <div style={styles.grid}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Set All Variability</label>
-              <select
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) {
-                    if (e.target.value === 'randomize') {
-                      randomizeAllVariability();
-                    } else {
-                      setAllTeamsVariability(e.target.value);
-                    }
-                    e.target.value = '';
-                  }
-                }}
-                style={styles.input}
-              >
-                <option value="">Select Variability...</option>
-                <option value="0">0% (Rigid)</option>
-                <option value="0.2">20% (Low)</option>
-                <option value="0.3">30% (Medium)</option>
-                <option value="0.5">50% (High)</option>
-                <option value="0.7">70% (Very High)</option>
-                <option value="0.8">80% (Extreme)</option>
-                <option value="0.9">90% (Wild)</option>
-                <option value="1.0">100% (Pure Chaos)</option>
-                <option value="randomize">🎲 Randomize All</option>
-              </select>
-            </div>
-          </div>
-
-          <div style={{
-            fontSize: '12px',
-            color: themeStyles.text.muted,
-            marginTop: '8px',
-            lineHeight: '1.4'
-          }}>
-            Variability controls how much teams deviate from their primary strategy. Higher values create more unpredictable drafting behavior.
-          </div>
-        </div>
-      )}
-    </div>
+      </Box>
+    </Stack>
   );
 
-  // Draft Progress Content
+  // ── Progress tab ───────────────────────────────────────────────────
   const renderDraftProgress = () => (
-    <div>
-      <h3 style={{
-        fontSize: '16px',
-        fontWeight: '600',
-        marginBottom: '16px',
-        color: themeStyles.text.primary
-      }}>
-        Draft Progress by Position
-      </h3>
+    <Stack gap="md">
+      <Text size="sm" fw={600}>Draft Progress by Position</Text>
 
-      {Object.entries(draftStats).map(([position, stats]) => (
-        <div key={position} style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          marginBottom: '16px'
-        }}>
-          <div style={{
-            width: '48px',
-            fontSize: '14px',
-            fontWeight: '500',
-            color: themeStyles.text.primary
-          }}>
-            {position}
-          </div>
-          <div style={{
-            flex: '1',
-            backgroundColor: themeStyles.progressBar.backgroundColor,
-            borderRadius: '9999px',
-            height: '24px',
-            position: 'relative'
-          }}>
-            <div style={{
-              backgroundColor: '#2563eb',
-              height: '24px',
-              borderRadius: '9999px',
-              width: `${stats.total > 0 ? (stats.drafted / stats.total) * 100 : 0}%`,
-              transition: 'width 0.3s'
-            }} />
-            <div style={{
-              position: 'absolute',
-              inset: '0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '12px',
-              fontWeight: '500'
-            }}>
-              {stats.drafted} / {stats.total}
-            </div>
-          </div>
-          <div style={{
-            width: '64px',
-            fontSize: '14px',
-            color: themeStyles.text.secondary
-          }}>
-            {stats.total > 0 ? Math.round((stats.drafted / stats.total) * 100) : 0}%
-          </div>
-        </div>
-      ))}
+      {Object.entries(draftStats).map(([position, stats]) => {
+        const pct = stats.total > 0 ? (stats.drafted / stats.total) * 100 : 0;
+        return (
+          <Group key={position} gap="md" wrap="nowrap">
+            <Text size="sm" fw={600} w={44}>{position}</Text>
+            <Box pos="relative" flex={1}>
+              <Progress
+                value={pct}
+                size="lg"
+                radius="xl"
+                color="teal"
+                bg="var(--mantine-color-dark-4)"
+              />
+              <Text
+                size="xs"
+                fw={600}
+                style={{
+                  position: 'absolute', inset: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: pct > 45 ? '#fff' : 'inherit',
+                }}
+              >
+                {stats.drafted} / {stats.total}
+              </Text>
+            </Box>
+            <Text size="sm" c="dimmed" w={44} ta="right">{Math.round(pct)}%</Text>
+          </Group>
+        );
+      })}
 
-      <div style={{
-        marginTop: '16px',
-        fontSize: '14px',
-        color: themeStyles.text.secondary
-      }}>
+      <Text size="sm" c="dimmed">
         Total Drafted: {draftedPlayers.length} / {players.length}
-      </div>
-    </div>
+      </Text>
+    </Stack>
   );
 
   const renderContent = () => {
@@ -733,73 +569,65 @@ const SettingsPanel = ({
   };
 
   return (
-    <div style={styles.container}>
+    <Paper
+      withBorder
+      radius="lg"
+      mb="lg"
+      style={{ overflow: 'hidden', boxShadow: 'var(--ffx-shadow-sm)' }}
+    >
       {/* Header */}
-      <div style={styles.header} onClick={() => setIsExpanded(!isExpanded)}>
-        <div style={styles.headerTitle}>
-          <Settings size={20} />
-          Configuration
-        </div>
+      <Group
+        justify="space-between"
+        wrap="nowrap"
+        px="lg"
+        py="sm"
+        onClick={() => setIsExpanded(!isExpanded)}
+        style={{ cursor: 'pointer', borderBottom: isExpanded ? '1px solid var(--mantine-color-default-border)' : 'none' }}
+      >
+        <Group gap="xs">
+          <Settings size={18} />
+          <Text fw={600} size="md">Configuration</Text>
+        </Group>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={styles.statusBar}>
-            <span>{autoTeams}/{numTeams} Auto Teams</span>
-            <span>{draftProgress}% Complete</span>
-            <span>{draftStyle === 'snake' ? 'Snake' : 'Linear'} Draft</span>
-          </div>
+        <Group gap="sm" wrap="nowrap">
+          <Group gap="xs" visibleFrom="sm">
+            <Badge size="sm" variant="light" color="teal">{autoTeams}/{numTeams} auto</Badge>
+            <Badge size="sm" variant="light" color="blue">{draftProgress}%</Badge>
+            <Badge size="sm" variant="light" color="gray">
+              {draftStyle === 'snake' ? 'Snake' : 'Linear'}
+            </Badge>
+          </Group>
+          <Button
+            size="compact-xs"
+            variant="default"
+            leftSection={isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
+          >
+            {isExpanded ? 'Collapse' : 'Configure'}
+          </Button>
+        </Group>
+      </Group>
 
-          <button style={styles.expandButton}>
-            {isExpanded ? (
-              <>
-                <ChevronUp size={14} />
-                Collapse
-              </>
-            ) : (
-              <>
-                <ChevronDown size={14} />
-                Configure
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      {/* Body */}
+      <UnmountCollapse collapsed={!isExpanded}>
+        <Tabs value={activeTab} onChange={setActiveTab} variant="outline" radius="md">
+          <Tabs.List grow px="md" pt="xs">
+            <Tabs.Tab value="league" leftSection={<Settings size={15} />}>League</Tabs.Tab>
+            <Tabs.Tab value="auto-draft" leftSection={<Bot size={15} />}>Auto-Draft</Tabs.Tab>
+            <Tabs.Tab value="progress" leftSection={<Wand2 size={15} />}>Progress</Tabs.Tab>
+          </Tabs.List>
 
-      {/* Tabs */}
-      <div style={styles.tabsContainer}>
-        {tabs.map(tab => {
-          const isActive = activeTab === tab.id;
-          const IconComponent = tab.icon;
-
-          return (
-            <div
-              key={tab.id}
-              style={{
-                ...styles.tab,
-                ...(isActive ? styles.tabActive : {}),
-                color: isActive ? '#2563eb' : themeStyles.text.secondary
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveTab(tab.id);
-              }}
-            >
-              <IconComponent size={20} />
-              <div style={{ fontSize: '13px', fontWeight: '600', textAlign: 'center' }}>
-                {tab.label}
-              </div>
-              <div style={{ fontSize: '11px', color: themeStyles.text.muted, textAlign: 'center' }}>
-                {tab.description}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Content */}
-      <div style={styles.content}>
-        {renderContent()}
-      </div>
-    </div>
+          <Box p="lg">
+            <Tabs.Panel value="league">{renderLeagueSettings()}</Tabs.Panel>
+            <Tabs.Panel value="auto-draft">{renderAutoDraftSettings()}</Tabs.Panel>
+            <Tabs.Panel value="progress">{renderDraftProgress()}</Tabs.Panel>
+          </Box>
+        </Tabs>
+      </UnmountCollapse>
+    </Paper>
   );
 };
 

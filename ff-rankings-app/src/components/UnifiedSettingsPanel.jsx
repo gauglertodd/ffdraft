@@ -130,7 +130,7 @@ const UnifiedSettingsPanel = ({
     },
     tabActive: {
       backgroundColor: themeStyles.hover.background,
-      borderBottomColor: '#2563eb'
+      borderBottomColor: 'var(--ffx-info)'
     },
     tabIcon: {
       transition: 'color 0.2s'
@@ -178,13 +178,13 @@ const UnifiedSettingsPanel = ({
       width: '6px',
       height: '6px',
       borderRadius: '50%',
-      backgroundColor: '#16a34a'
+      backgroundColor: 'var(--ffx-accent)'
     }
   };
 
   const getTabColor = (tabId) => {
     const isActive = activeTab === tabId;
-    if (isActive) return '#2563eb';
+    if (isActive) return 'var(--ffx-info)';
     return themeStyles.text.secondary;
   };
 

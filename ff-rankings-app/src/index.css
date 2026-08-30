@@ -1,9 +1,130 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ============================================================
+   ffdraft global styles & design tokens
+   Theme is driven by CSS custom properties; `.ffx-dark` /
+   `.ffx-light` on <html> switches the whole palette instantly.
+   ============================================================ */
 
-@layer base {
-  html {
-    font-family: system-ui, sans-serif;
-  }
+@import '@fontsource/iosevka/400.css';
+@import '@fontsource/iosevka/500.css';
+@import '@fontsource/iosevka/600.css';
+@import '@fontsource/iosevka/700.css';
+
+:root {
+  --ffx-font: 'Iosevka', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --ffx-radius: 14px;
+  --ffx-radius-sm: 9px;
+}
+
+/* ── Dark theme (default) ───────────────────────────────────── */
+:root, .ffx-dark {
+  --ffx-bg: #0b1220;
+  --ffx-surface: #111a2c;
+  --ffx-surface-alt: #182338;
+  --ffx-overlay: #1e2b44;
+  --ffx-border: #242f47;
+  --ffx-border-strong: #33436a;
+  --ffx-text: #eef2f8;
+  --ffx-text-2: #aab7cf;
+  --ffx-text-3: #7d8ca8;
+  --ffx-accent: #10b981;
+  --ffx-accent-strong: #059669;
+  --ffx-accent-soft: rgba(16, 185, 129, 0.14);
+  --ffx-info: #3b82f6;
+  --ffx-warning: #f59e0b;
+  --ffx-danger: #ef4444;
+  --ffx-header-glass: rgba(11, 18, 32, 0.78);
+  --ffx-shadow: 0 6px 24px -8px rgba(0, 0, 0, 0.6);
+  --ffx-shadow-sm: 0 2px 10px -4px rgba(0, 0, 0, 0.5);
+  --ffx-scrollbar: #2c3a58;
+}
+
+/* ── Light theme ────────────────────────────────────────────── */
+.ffx-light {
+  --ffx-bg: #f4f6f9;
+  --ffx-surface: #ffffff;
+  --ffx-surface-alt: #eef1f6;
+  --ffx-overlay: #ffffff;
+  --ffx-border: #e2e8f0;
+  --ffx-border-strong: #cbd5e1;
+  --ffx-text: #0f172a;
+  --ffx-text-2: #51607a;
+  --ffx-text-3: #8895ab;
+  --ffx-accent: #059669;
+  --ffx-accent-strong: #047857;
+  --ffx-accent-soft: rgba(5, 150, 105, 0.12);
+  --ffx-header-glass: rgba(244, 246, 249, 0.8);
+  --ffx-shadow: 0 4px 20px -8px rgba(15, 23, 42, 0.18);
+  --ffx-shadow-sm: 0 2px 8px -4px rgba(15, 23, 42, 0.12);
+  --ffx-scrollbar: #c3cddd;
+}
+
+/* ── Base ───────────────────────────────────────────────────── */
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--ffx-font);
+  background: var(--ffx-bg);
+  color: var(--ffx-text);
+  font-size: 15px;
+  /* Iosevka is a narrow monospace: slight positive tracking + generous line
+     height keeps text readable instead of cramped. */
+  letter-spacing: 0.015em;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+  letter-spacing: inherit;
+}
+
+* { box-sizing: border-box; }
+
+/* ── Custom scrollbars ─────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ffx-scrollbar) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--ffx-scrollbar);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: var(--ffx-border-strong); }
+
+/* ── Focus visibility for keyboard users ────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--ffx-accent);
+  outline-offset: 2px;
+}
+
+/* ── Interactive card: CSS-only hover lift ──────────────────── */
+.ffx-card-interactive {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.ffx-card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ffx-shadow);
+  border-color: var(--ffx-border-strong) !important;
+}
+
+/* ── Shared keyframes ──────────────────────────────────────── */
+@keyframes ffx-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Radix select content uses this to inherit theme bg */
+.ffx-popover {
+  background: var(--ffx-overlay);
+  border: 1px solid var(--ffx-border);
+  box-shadow: var(--ffx-shadow);
+  color: var(--ffx-text);
 }

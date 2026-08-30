@@ -1,6 +1,7 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw, Save, Trash2, Plus, Eye, X, UserPlus, Crown } from 'lucide-react';
 import { RANKING_FILES, rankingLabel } from '../rankings/sources';
+import { toast } from 'sonner';
 
 const UnifiedControlPanel = ({
   themeStyles,
@@ -40,13 +41,38 @@ const UnifiedControlPanel = ({
   const [isLoadingPreset, setIsLoadingPreset] = useState(false);
 
   // Filter players for search dropdown - now works with unified state
+  // Perf: the filter itself is trivial (<1ms over ~600 players); the cost is
+  // re-rendering dropdown rows on every keystroke. So: 3-char gate, precomputed
+  // lowercase lookup keys, and a short debounce so typing never blocks.
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   useEffect(() => {
-    if (searchQuery.length >= 2) {
-      const searchLower = searchQuery.toLowerCase();
+    const t = setTimeout(() => setDebouncedQuery(searchQuery), 120);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const lookupKeys = useMemo(() => {
+    const map = new Map();
+    for (const p of players) {
+      map.set(p.id, {
+        name: p.name.toLowerCase(),
+        compact: p.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+        team: p.team.toLowerCase(),
+      });
+    }
+    return map;
+  }, [players]);
+
+  useEffect(() => {
+    if (debouncedQuery.length >= 1) {
+      const searchLower = debouncedQuery.toLowerCase();
+      const compactQuery = searchLower.replace(/[^a-z0-9]/g, '');
       const matches = players
         .filter(player => {
-          const matchesSearch = player.name.toLowerCase().includes(searchLower) ||
-                              player.team.toLowerCase().includes(searchLower);
+          const keys = lookupKeys.get(player.id);
+          if (!keys) return false;
+          const matchesSearch = keys.name.includes(searchLower) ||
+                              keys.team.includes(searchLower) ||
+                              (compactQuery.length >= 2 && keys.compact.includes(compactQuery));
           return matchesSearch && player.status === 'available'; // Only show available players
         })
         .slice(0, 8)
@@ -59,7 +85,7 @@ const UnifiedControlPanel = ({
       setFilteredPlayers([]);
       setIsDropdownOpen(false);
     }
-  }, [searchQuery, players]);
+  }, [debouncedQuery, players, lookupKeys]);
 
   // Scan for CSV files
   const scanForCSVFiles = async () => {
@@ -97,7 +123,7 @@ const UnifiedControlPanel = ({
       }
       setShowCSVOptions(false);
     } catch (error) {
-      alert(`Failed to load ${filename}`);
+      toast.error(`Failed to load ${filename}`);
     } finally {
       setIsLoadingPreset(false);
     }
@@ -208,7 +234,7 @@ const UnifiedControlPanel = ({
       transition: 'background-color 0.2s'
     },
     dropdownItemSelected: {
-      backgroundColor: '#2563eb',
+      backgroundColor: 'var(--ffx-info)',
       color: '#ffffff'
     },
     dropdownItemHover: {
@@ -273,7 +299,7 @@ const UnifiedControlPanel = ({
       color: '#ffffff'
     },
     draftButton: {
-      backgroundColor: '#16a34a',
+      backgroundColor: 'var(--ffx-accent)',
       color: '#ffffff',
       padding: '4px 8px',
       fontWeight: '500'
@@ -307,7 +333,7 @@ const UnifiedControlPanel = ({
       cursor: 'pointer',
       border: 'none',
       transition: 'all 0.2s',
-      backgroundColor: isKeeperMode ? '#7c3aed' : themeStyles.button.secondary.backgroundColor,
+      backgroundColor: isKeeperMode ? 'var(--ffx-accent)' : themeStyles.button.secondary.backgroundColor,
       color: isKeeperMode ? '#ffffff' : themeStyles.button.secondary.color
     },
     optionsDropdown: {
@@ -339,7 +365,7 @@ const UnifiedControlPanel = ({
     },
     keeperStatusBadge: {
       fontSize: '10px',
-      backgroundColor: '#7c3aed',
+      backgroundColor: 'var(--ffx-accent)',
       color: '#ffffff',
       padding: '2px 6px',
       borderRadius: '12px',
@@ -377,7 +403,7 @@ const UnifiedControlPanel = ({
                       ...styles.dropdownItem,
                       ...(isSelected ? styles.dropdownItemSelected : {}),
                       // Add subtle background for watched/avoided players
-                      backgroundColor: isSelected ? '#2563eb' :
+                      backgroundColor: isSelected ? 'var(--ffx-info)' :
                         isWatched ? `${watchHighlightColor}20` :
                         isAvoided ? `${avoidHighlightColor}20` : 'transparent'
                     }}
@@ -595,7 +621,7 @@ const UnifiedControlPanel = ({
                 <div
                   style={{
                     ...styles.optionItem,
-                    color: '#2563eb',
+                    color: 'var(--ffx-info)',
                     fontWeight: '500',
                     borderTop: `1px solid ${themeStyles.border}`,
                     borderBottom: 'none'

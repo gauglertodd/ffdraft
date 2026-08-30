@@ -3,6 +3,42 @@
 import React, { useState, useMemo } from 'react';
 import { UserPlus, Eye, Sun, Moon, EyeOff, TrendingUp, X } from 'lucide-react';
 import { TeamVisual } from './TeamVisual';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Select } from './Modern';
+import { Paper, Group, Text } from '@mantine/core';
+
+// Animated availability badge: the number counts up to its target while the
+// background color eases between risk levels, so a fresh prediction sweep
+// reads as motion instead of a wall of flickering percentages.
+function AvailabilityBadge({ probability, color, text, title, style }) {
+  const displayPct = Math.round(probability * 100);
+  return (
+    <motion.span
+      style={{ ...style, backgroundColor: color, position: 'relative', overflow: 'hidden' }}
+      title={title}
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      key={displayPct}
+    >
+      <motion.span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: `${probability * 100}%`,
+          backgroundColor: 'rgba(255, 255, 255, 0.22)',
+        }}
+        initial={{ width: 0 }}
+        animate={{ width: `${probability * 100}%` }}
+        transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+      />
+      <span style={{ position: 'relative' }}>{text}</span>
+    </motion.span>
+  );
+}
 
 const PlayerList = ({
   // Core unified state
@@ -172,7 +208,7 @@ const PlayerList = ({
 
   // Availability prediction helper functions
   const getAvailabilityColor = (probability) => {
-    if (probability >= 0.8) return '#16a34a';
+    if (probability >= 0.8) return 'var(--ffx-accent)';
     if (probability >= 0.6) return '#ca8a04';
     if (probability >= 0.4) return '#ea580c';
     return '#dc2626';
@@ -220,6 +256,29 @@ const PlayerList = ({
     });
 
     return allFlexPlayers.sort((a, b) => a.rank - b.rank);
+  };
+
+  // Renders one player row. Drafted rows animate out (collapse + fade) via
+  // AnimatePresence in the list wrappers; remaining rows spring into place.
+  const renderPlayerRow = (player, rowStyle, extra = {}) => {
+    const isDrafted = player.status !== 'available';
+    const isWatched = player.watchStatus === 'watched';
+    const isAvoided = player.watchStatus === 'avoided';
+
+    return (
+      <motion.div
+        key={player.id}
+        layout
+        initial={{ opacity: 0, y: 8 }}
+        animate={isDrafted ? { opacity: 0.5, scale: 0.98 } : { opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, overflow: 'hidden' }}
+        transition={{ type: 'spring', stiffness: 350, damping: 32 }}
+        style={getPlayerRowStyle(rowStyle, player)}
+        {...extra}
+      >
+        {extra.children}
+      </motion.div>
+    );
   };
 
   // Helper function to determine player row styling
@@ -278,8 +337,8 @@ const PlayerList = ({
       flexShrink: 0
     },
     tabActive: {
-      borderBottomColor: '#2563eb',
-      color: '#2563eb'
+      borderBottomColor: 'var(--ffx-info)',
+      color: 'var(--ffx-info)'
     },
     tabInactive: {
       color: themeStyles.text.secondary
@@ -615,7 +674,7 @@ const PlayerList = ({
       padding: '4px 8px',
       fontSize: '11px',
       borderRadius: '4px',
-      backgroundColor: '#16a34a',
+      backgroundColor: 'var(--ffx-accent)',
       color: '#ffffff',
       border: 'none',
       cursor: 'pointer',
@@ -638,7 +697,7 @@ const PlayerList = ({
       position: 'relative',
       width: '44px',
       height: '24px',
-      backgroundColor: isCondensedMode ? '#2563eb' : '#d1d5db',
+      backgroundColor: isCondensedMode ? 'var(--ffx-info)' : '#d1d5db',
       borderRadius: '12px',
       cursor: 'pointer',
       transition: 'background-color 0.2s'
@@ -669,11 +728,12 @@ const PlayerList = ({
             <div key={position} style={styles.positionColumn}>
               <div style={{
                 ...styles.positionHeader,
-                backgroundColor: positionColors[position] || '#6b7280'
+                backgroundColor: positionColors[position] || 'var(--ffx-text-3)'
               }}>
                 {position} ({positionPlayers.length})
               </div>
               <div style={styles.positionPlayersList}>
+                <AnimatePresence initial={false}>
                 {positionPlayers.map((player) => {
                   const isDrafted = player.status !== 'available';
                   const isUndrafted = !isDrafted;
@@ -681,8 +741,13 @@ const PlayerList = ({
                   const isAvoided = player.watchStatus === 'avoided';
 
                   return (
-                    <div
+                    <motion.div
                       key={player.id}
+                      layout
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: isDrafted ? 0.5 : 1 }}
+                      exit={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, overflow: 'hidden' }}
+                      transition={{ type: 'spring', stiffness: 350, damping: 32 }}
                       style={getPlayerRowStyle(
                         isCondensedMode ? styles.compactPlayerRowCondensed : styles.compactPlayerRow,
                         player
@@ -754,15 +819,13 @@ const PlayerList = ({
                                   </span>
                                 )}
                                 {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
-                                  <span
-                                    style={{
-                                      ...styles.compactAvailabilityBadge,
-                                      backgroundColor: getAvailabilityColor(availabilityPredictions[player.id])
-                                    }}
+                                  <AvailabilityBadge
+                                    probability={availabilityPredictions[player.id]}
+                                    color={getAvailabilityColor(availabilityPredictions[player.id])}
+                                    text={`${Math.round(availabilityPredictions[player.id] * 100)}%`}
                                     title={getAvailabilityTooltip(availabilityPredictions[player.id], player.name)}
-                                  >
-                                    {Math.round(availabilityPredictions[player.id] * 100)}%
-                                  </span>
+                                    style={styles.compactAvailabilityBadge}
+                                  />
                                 )}
                               </div>
                             )}
@@ -790,18 +853,18 @@ const PlayerList = ({
                                 </span>
                               )}
                               {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
-                                <span
+                                <AvailabilityBadge
+                                  probability={availabilityPredictions[player.id]}
+                                  color={getAvailabilityColor(availabilityPredictions[player.id])}
+                                  text={`${Math.round(availabilityPredictions[player.id] * 100)}%`}
+                                  title={getAvailabilityTooltip(availabilityPredictions[player.id], player.name)}
                                   style={{
                                     ...styles.compactAvailabilityBadge,
-                                    backgroundColor: getAvailabilityColor(availabilityPredictions[player.id]),
                                     fontSize: '8px',
                                     padding: '2px 4px',
                                     minWidth: 'fit-content'
                                   }}
-                                  title={getAvailabilityTooltip(availabilityPredictions[player.id], player.name)}
-                                >
-                                  {Math.round(availabilityPredictions[player.id] * 100)}%
-                                </span>
+                                />
                               )}
                             </div>
                           )}
@@ -855,7 +918,7 @@ const PlayerList = ({
                           )}
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })}
                 {positionPlayers.length === 0 && (
@@ -868,6 +931,7 @@ const PlayerList = ({
                     No players found
                   </div>
                 )}
+                </AnimatePresence>
               </div>
             </div>
           );
@@ -883,6 +947,7 @@ const PlayerList = ({
 
     return (
       <div style={styles.playersList}>
+        <AnimatePresence initial={false}>
         {playersToShow.map((player) => {
           const isDrafted = player.status !== 'available';
           const isUndrafted = !isDrafted;
@@ -893,8 +958,13 @@ const PlayerList = ({
           const displayRank = (activeTab === 'overall' || activeTab === 'FLEX') ? player.rank : (player.positionRank || player.rank);
 
           return (
-            <div
+            <motion.div
               key={player.id}
+              layout
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: isDrafted ? 0.5 : 1 }}
+              exit={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, overflow: 'hidden' }}
+              transition={{ type: 'spring', stiffness: 350, damping: 32 }}
               style={getPlayerRowStyle(
                 isCondensedMode ? styles.playerRowCondensed : styles.playerRow,
                 player
@@ -930,14 +1000,14 @@ const PlayerList = ({
                       {player.name}
                       {isWatched && <span style={{ marginLeft: '8px', fontSize: '14px' }}>👁️</span>}
                       {isAvoided && <span style={{ marginLeft: '8px', fontSize: '14px' }}>🚫</span>}
-                      {player.status === 'keeper' && <span style={{ marginLeft: '8px', fontSize: '14px', color: '#7c3aed' }}>👑</span>}
+                      {player.status === 'keeper' && <span style={{ marginLeft: '8px', fontSize: '14px', color: 'var(--ffx-accent)' }}>👑</span>}
                     </div>
 
                     {!isCondensedMode && (
                       <div style={styles.playerMeta}>
                         <span style={{
                           ...styles.tierBadge,
-                          backgroundColor: positionColors[player.position] || '#6b7280',
+                          backgroundColor: positionColors[player.position] || 'var(--ffx-text-3)',
                           marginRight: '8px'
                         }}>
                           {player.position}
@@ -962,15 +1032,13 @@ const PlayerList = ({
                           </span>
                         )}
                         {showAvailabilityPrediction && availabilityPredictions[player.id] !== undefined && (
-                          <span
-                            style={{
-                              ...styles.availabilityBadge,
-                              backgroundColor: getAvailabilityColor(availabilityPredictions[player.id])
-                            }}
+                          <AvailabilityBadge
+                            probability={availabilityPredictions[player.id]}
+                            color={getAvailabilityColor(availabilityPredictions[player.id])}
+                            text={getAvailabilityText(availabilityPredictions[player.id])}
                             title={getAvailabilityTooltip(availabilityPredictions[player.id], player.name)}
-                          >
-                            {getAvailabilityText(availabilityPredictions[player.id])}
-                          </span>
+                            style={styles.availabilityBadge}
+                          />
                         )}
                       </div>
                     )}
@@ -980,7 +1048,7 @@ const PlayerList = ({
                     <div style={styles.playerMetaCondensed}>
                       <span style={{
                         ...styles.tierBadge,
-                        backgroundColor: positionColors[player.position] || '#6b7280',
+                        backgroundColor: positionColors[player.position] || 'var(--ffx-text-3)',
                         fontSize: '10px',
                         padding: '4px 8px'
                       }}>
@@ -1061,7 +1129,7 @@ const PlayerList = ({
                         onClick={() => handleDraftClick(player)}
                         style={{
                           ...styles.tierBadge,
-                          backgroundColor: '#16a34a',
+                          backgroundColor: 'var(--ffx-accent)',
                           fontSize: '10px',
                           padding: '4px 8px',
                           cursor: 'pointer',
@@ -1070,10 +1138,10 @@ const PlayerList = ({
                         }}
                         title="Draft player"
                         onMouseEnter={(e) => {
-                          e.target.style.backgroundColor = '#15803d';
+                          e.target.style.backgroundColor = 'var(--ffx-accent-strong)';
                         }}
                         onMouseLeave={(e) => {
-                          e.target.style.backgroundColor = '#16a34a';
+                          e.target.style.backgroundColor = 'var(--ffx-accent)';
                         }}
                       >
                         ⚡
@@ -1099,9 +1167,10 @@ const PlayerList = ({
                   </span>
                 )}
               </div>
-            </div>
+            </motion.div>
           );
         })}
+        </AnimatePresence>
       </div>
     );
   };
@@ -1109,18 +1178,11 @@ const PlayerList = ({
   const mainPositionTabs = getMainPositionTabs();
 
   return (
-    <div style={styles.card}>
+    <Paper withBorder radius="lg" style={{ overflow: 'hidden', boxShadow: 'var(--ffx-shadow-sm)' }}>
       {/* Header with tabs and controls */}
-      <div style={{ padding: '24px', borderBottom: `1px solid ${themeStyles.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <h2 style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: themeStyles.text.primary,
-            margin: '0'
-          }}>
-            Player Rankings
-          </h2>
+      <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${themeStyles.border}` }}>
+        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
+          <Text size="lg" fw={600}>Player Rankings</Text>
 
           {/* View Controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1139,7 +1201,7 @@ const PlayerList = ({
                   cursor: 'pointer',
                   border: 'none',
                   transition: 'all 0.2s',
-                  backgroundColor: showAvailabilityPrediction ? '#7c3aed' : themeStyles.button.secondary.backgroundColor,
+                  backgroundColor: showAvailabilityPrediction ? 'var(--ffx-accent)' : themeStyles.button.secondary.backgroundColor,
                   color: showAvailabilityPrediction ? '#ffffff' : themeStyles.button.secondary.color
                 }}
                 title="Show probability that players will be available on your next pick"
@@ -1150,23 +1212,26 @@ const PlayerList = ({
 
               {showAvailabilityPrediction && (
                 <>
-                  <select
-                    value={predictionTrials}
-                    onChange={(e) => setPredictionTrials(parseInt(e.target.value))}
+                  <Select
+                    value={String(predictionTrials)}
+                    onValueChange={(v) => setPredictionTrials(parseInt(v))}
+                    options={[
+                      { value: '10', label: '10 trials' },
+                      { value: '25', label: '25 trials' },
+                      { value: '50', label: '50 trials' },
+                      { value: '100', label: '100 trials' },
+                      { value: '1000', label: '1000 trials' },
+                    ]}
                     style={{
                       ...themeStyles.input,
                       padding: '6px 8px',
                       borderRadius: '6px',
                       fontSize: '12px',
                       outline: 'none',
-                      minWidth: '80px'
+                      minWidth: '80px',
+                      color: themeStyles.text.primary
                     }}
-                    title="Number of simulation trials for accuracy"
-                  >
-                    <option value={10}>10 trials</option>
-                    <option value={100}>100 trials</option>
-                    <option value={1000}>1000 trials</option>
-                  </select>
+                  />
 
                   <button
                     onClick={onPredictAvailability}
@@ -1182,7 +1247,7 @@ const PlayerList = ({
                       cursor: isPredicting ? 'not-allowed' : 'pointer',
                       border: 'none',
                       transition: 'all 0.2s',
-                      backgroundColor: '#7c3aed',
+                      backgroundColor: 'var(--ffx-accent)',
                       color: '#ffffff',
                       opacity: isPredicting ? 0.5 : 1
                     }}
@@ -1383,7 +1448,7 @@ const PlayerList = ({
               </button>
             </div>
           </div>
-        </div>
+        </Group>
 
         {/* Tab navigation */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1431,7 +1496,7 @@ const PlayerList = ({
           No players found matching "{searchQuery}"
         </div>
       )}
-    </div>
+    </Paper>
   );
 };
 

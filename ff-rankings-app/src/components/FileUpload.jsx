@@ -1,6 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Upload, FileText, Info } from 'lucide-react';
 import { RANKING_FILES, rankingLabel } from '../rankings/sources';
+import { toast } from 'sonner';
+import { Paper, Title, Text, List, ThemeIcon, Stack, Group } from '@mantine/core';
 
 const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) => {
   const fileInputRef = useRef(null);
@@ -92,7 +94,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
       onFileUpload(file);
     } catch (error) {
       console.error('Error loading preset file:', error);
-      alert(`Failed to load ${filename}. Make sure the file exists in your public/ directory.`);
+      toast.error(`Failed to load ${filename}. Make sure the file exists in your public/ directory.`);
     } finally {
       setIsLoadingPreset(false);
       setSelectedPreset('');
@@ -193,9 +195,9 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
       fontSize: '16px',
       fontWeight: '600',
       cursor: 'pointer',
-      border: `2px dashed ${isDragOver ? '#2563eb' : themeStyles.border}`,
+      border: `2px dashed ${isDragOver ? 'var(--ffx-info)' : themeStyles.border}`,
       backgroundColor: isDragOver ? '#eff6ff' : themeStyles.card.backgroundColor,
-      color: isDragOver ? '#2563eb' : themeStyles.text.primary,
+      color: isDragOver ? 'var(--ffx-info)' : themeStyles.text.primary,
       transition: 'all 0.2s',
       width: '100%',
       minHeight: '80px',
@@ -235,7 +237,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
       width: '20px',
       height: '20px',
       border: '2px solid #e5e7eb',
-      borderTop: '2px solid #2563eb',
+      borderTop: '2px solid var(--ffx-info)',
       borderRadius: '50%',
       animation: 'spin 1s linear infinite'
     },
@@ -280,7 +282,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
     },
     presetCardHover: {
       backgroundColor: themeStyles.card.backgroundColor,
-      borderColor: '#2563eb',
+      borderColor: 'var(--ffx-info)',
       transform: 'translateY(-2px)',
       boxShadow: '0 4px 12px rgba(37, 99, 235, 0.15)'
     },
@@ -289,7 +291,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
       cursor: 'not-allowed'
     },
     presetIcon: {
-      color: '#2563eb',
+      color: 'var(--ffx-info)',
       marginBottom: '12px'
     },
     presetName: {
@@ -317,7 +319,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
       width: '20px',
       height: '20px',
       border: '2px solid #e5e7eb',
-      borderTop: '2px solid #2563eb',
+      borderTop: '2px solid var(--ffx-info)',
       borderRadius: '50%',
       animation: 'spin 1s linear infinite'
     }
@@ -326,48 +328,60 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
   return (
     <div style={styles.container}>
       {/* Welcome Section */}
-      <div style={styles.welcomeSection}>
-        <h1 style={styles.welcomeTitle}>Fantasy Football Draft Tracker</h1>
-        <p style={styles.welcomeSubtitle}>
+      <Stack align="center" gap="xs" mb={40}>
+        <Title order={1} size={32} fw={700}>Fantasy Football Draft Tracker</Title>
+        <Text size="lg" c="dimmed" maw={600} ta="center" lh={1.6}>
           Import your player rankings to start drafting with advanced auto-draft strategies,
           availability predictions, and real-time draft tracking.
-        </p>
-      </div>
+        </Text>
+      </Stack>
 
       {/* CSV Requirements */}
-      <div style={styles.csvRequirements}>
-        <div style={styles.requirementsTitle}>
-          <Info size={22} />
-          CSV Format Requirements
-        </div>
-        <ul style={styles.requirementsList}>
-          <li style={styles.requirementsItem}>
-            <strong>Required columns:</strong> name, position, team, rank
-          </li>
-          <li style={styles.requirementsItem}>
-            <strong>Optional columns:</strong> tier (enables tier-based draft strategies)
-          </li>
-          <li style={styles.requirementsItem}>
-            <strong>Supported positions:</strong> QB, RB, WR, TE, DST, K
-          </li>
-          <li style={styles.requirementsItem}>
-            <strong>Format:</strong> Standard CSV with headers in the first row
-          </li>
-        </ul>
-        <div style={styles.optionalNote}>
-          💡 <strong>Pro Tip:</strong> Adding a "tier" column enables advanced tier-based draft strategies.
-        </div>
-      </div>
+      <Paper withBorder radius="lg" p="xl" mb="xl">
+        <Group gap="xs" mb="md">
+          <ThemeIcon variant="light" color="teal" size="lg" radius="md">
+            <Info size={18} />
+          </ThemeIcon>
+          <Text size="lg" fw={600}>CSV Format Requirements</Text>
+        </Group>
+        <List spacing="xs" size="sm" c="dimmed" center={false}>
+          <List.Item><b>Required columns:</b> name, position, team, rank</List.Item>
+          <List.Item><b>Optional columns:</b> tier (enables tier-based draft strategies)</List.Item>
+          <List.Item><b>Supported positions:</b> QB, RB, WR, TE, DST, K</List.Item>
+          <List.Item><b>Format:</b> Standard CSV with headers in the first row</List.Item>
+        </List>
+        <Text size="sm" c="dimmed" fs="italic" mt="md" style={{
+          backgroundColor: 'var(--mantine-color-default-hover)',
+          padding: '10px 14px',
+          borderRadius: 8,
+        }}>
+          💡 <b>Pro Tip:</b> Adding a "tier" column enables advanced tier-based draft strategies.
+        </Text>
+      </Paper>
 
       {/* Action Card */}
-      <div style={styles.actionsSection}>
-        <div style={styles.actionCard}>
-          <div style={styles.actionTitle}>Upload Your Rankings</div>
-          <div style={styles.actionDescription}>
+      <Stack align="center" gap={0} mb="xl">
+        <Paper withBorder radius="lg" p="xl" w={500} maw="100%">
+          <Text size="lg" fw={600} mb={8}>Upload Your Rankings</Text>
+          <Text size="sm" c="dimmed" mb="lg" lh={1.5}>
             Browse for a CSV file or drag and drop it here to get started with your draft.
-          </div>
+          </Text>
           <div
-            style={styles.uploadButton}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 12,
+              padding: '22px 32px',
+              borderRadius: 12,
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: `2px dashed ${isDragOver ? 'var(--ffx-accent)' : 'var(--ffx-border-strong)'}`,
+              backgroundColor: isDragOver ? 'var(--ffx-accent-soft)' : 'transparent',
+              color: isDragOver ? 'var(--ffx-accent)' : 'var(--ffx-text)',
+              transition: 'all 0.2s',
+            }}
             onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => {
               e.preventDefault();
@@ -386,7 +400,7 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
               }
             }}
           >
-            <Upload size={24} />
+            <Upload size={22} />
             {isDragOver ? 'Drop CSV file here' : 'Browse for CSV or Drag & Drop'}
           </div>
           <input
@@ -396,8 +410,8 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
             onChange={(e) => e.target.files[0] && onFileUpload(e.target.files[0])}
             style={{ display: 'none' }}
           />
-        </div>
-      </div>
+        </Paper>
+      </Stack>
 
       {/* Pre-loaded Rankings Section */}
       <div style={styles.presetSection}>
@@ -441,26 +455,12 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
               return (
                 <div
                   key={preset.filename}
+                  className="ffx-card-interactive"
                   style={{
                     ...styles.presetCard,
                     ...(isLoading ? styles.presetCardLoading : {})
                   }}
                   onClick={() => !isLoading && handlePresetLoad(preset.filename)}
-                  onMouseEnter={(e) => {
-                    if (!isLoading) {
-                      Object.assign(e.target.style, styles.presetCardHover);
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isLoading) {
-                      Object.assign(e.target.style, {
-                        backgroundColor: styles.presetCard.backgroundColor,
-                        borderColor: themeStyles.border,
-                        transform: 'translateY(0px)',
-                        boxShadow: 'none'
-                      });
-                    }
-                  }}
                 >
                   <FileText style={styles.presetIcon} size={24} />
                   <div style={styles.presetName}>{preset.name}</div>
@@ -480,15 +480,6 @@ const FileUpload = ({ onFileUpload, isDragOver, setIsDragOver, themeStyles }) =>
           </div>
         )}
       </div>
-
-      <style>
-        {`
-          @keyframes spin {
-            0% { transform: translateY(-50%) rotate(0deg); }
-            100% { transform: translateY(-50%) rotate(360deg); }
-          }
-        `}
-      </style>
     </div>
   );
 };

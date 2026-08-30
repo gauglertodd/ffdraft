@@ -131,7 +131,7 @@ const KeeperModePanel = ({
       position: 'relative',
       width: '44px',
       height: '24px',
-      backgroundColor: isKeeperMode ? '#2563eb' : '#d1d5db',
+      backgroundColor: isKeeperMode ? 'var(--ffx-info)' : '#d1d5db',
       borderRadius: '12px',
       cursor: 'pointer',
       transition: 'background-color 0.2s'
@@ -214,7 +214,7 @@ const KeeperModePanel = ({
       alignItems: 'center'
     },
     editButton: {
-      backgroundColor: '#2563eb',
+      backgroundColor: 'var(--ffx-info)',
       color: '#ffffff'
     },
     deleteButton: {
@@ -226,7 +226,7 @@ const KeeperModePanel = ({
       alignItems: 'center',
       gap: '8px',
       padding: '12px 16px',
-      backgroundColor: '#16a34a',
+      backgroundColor: 'var(--ffx-accent)',
       color: '#ffffff',
       border: 'none',
       borderRadius: '8px',
@@ -347,7 +347,7 @@ const KeeperModePanel = ({
       transition: 'all 0.2s'
     },
     primaryButton: {
-      backgroundColor: '#2563eb',
+      backgroundColor: 'var(--ffx-info)',
       color: '#ffffff'
     },
     secondaryButton: {
@@ -422,7 +422,7 @@ const KeeperModePanel = ({
                       <span style={{
                         padding: '2px 6px',
                         borderRadius: '4px',
-                        backgroundColor: '#2563eb',
+                        backgroundColor: 'var(--ffx-info)',
                         color: '#ffffff',
                         fontSize: '11px',
                         fontWeight: '600'

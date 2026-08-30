@@ -72,9 +72,10 @@ class TeamRoster:
 
         # FLEX can take RB, WR, TE
         if position in [Position.RB, Position.WR, Position.TE]:
-            return bool(self.get_empty_slots_by_position(Position.FLEX))
+            if self.get_empty_slots_by_position(Position.FLEX):
+                return True
 
-        # BENCH can take anyone
+        # BENCH can take anyone (including QB, DST, K)
         return bool(self.get_empty_slots_by_position(Position.BENCH))
 
     def get_position_need_priority(self) -> Dict[Position, int]:
@@ -891,6 +892,216 @@ class BalancedStrategy(DraftStrategy):
         return best_player['id'] if best_player else None
 
 
+class VBDStrategy(DraftStrategy):
+    """Value Based Drafting - pick by value above a positional baseline"""
+
+    # Baseline ranks for a typical 12-team league: the expected
+    # starting-caliber cutoff at each position. A player's value is how far
+    # their overall rank sits above (i.e. better than) their position's
+    # baseline, so scarce positions with deep starting demand (RB/WR) get
+    # picked earlier than their raw rank suggests.
+    POSITIONAL_BASELINES = {
+        'QB': 15,
+        'RB': 33,
+        'WR': 39,
+        'TE': 15,
+    }
+
+    def __init__(self):
+        super().__init__("VBD", "Value Based Drafting: pick the player with the most value above their position's baseline rank")
+
+    def __call__(self, available_players: List[dict], team_roster: TeamRoster) -> Optional[int]:
+        # First check if we need DST/K in final rounds
+        dst_k_pick = self._handle_dst_k_draft(available_players, team_roster)
+        if dst_k_pick:
+            return dst_k_pick
+
+        skill_players = self._filter_skill_position_players(available_players, team_roster)
+        if not skill_players:
+            return None
+
+        # Filter out QBs if we shouldn't draft one
+        if not self._should_draft_qb(team_roster):
+            skill_players = [p for p in skill_players if p['position'] != 'QB']
+
+        if not skill_players:
+            return None
+
+        def vbd_value(p: dict) -> int:
+            baseline = self.POSITIONAL_BASELINES.get(p['position'], p['rank'])
+            return baseline - p['rank']
+
+        best_player = max(skill_players, key=lambda p: (vbd_value(p), -p['rank']))
+        return best_player['id']
+
+
+class ScarcityStrategy(DraftStrategy):
+    """Positional scarcity - draft where the position is about to dry up"""
+
+    # Never consider reaching more than this many spots past the top of the
+    # remaining board, and how strongly overall rank pulls against the
+    # positional gap in the scoring.
+    MAX_REACH = 25
+    SCARCITY_PENALTY = 0.35
+
+    def __init__(self):
+        super().__init__("Scarcity", "Run prevention: target positions about to dry up, weighing the gap to the next player at the same position")
+
+    def __call__(self, available_players: List[dict], team_roster: TeamRoster) -> Optional[int]:
+        # First check if we need DST/K in final rounds
+        dst_k_pick = self._handle_dst_k_draft(available_players, team_roster)
+        if dst_k_pick:
+            return dst_k_pick
+
+        skill_players = self._filter_skill_position_players(available_players, team_roster)
+        if not skill_players:
+            return None
+
+        # Filter out QBs if we shouldn't draft one
+        if not self._should_draft_qb(team_roster):
+            skill_players = [p for p in skill_players if p['position'] != 'QB']
+
+        if not skill_players:
+            return None
+
+        by_position: Dict[str, List[dict]] = {}
+        for p in skill_players:
+            by_position.setdefault(p['position'], []).append(p)
+
+        top_rank = min(p['rank'] for p in skill_players)
+
+        # Score each position by the gap between its best remaining player
+        # and the next one (run prevention: if that position dries up, how
+        # much do we lose?), minus a small cost for how far the pick sits
+        # from the top of the overall board. Take the best-scoring player.
+        best_player = None
+        best_score = float('-inf')
+        for pos_players in by_position.values():
+            pos_players.sort(key=lambda p: p['rank'])
+            top_p = pos_players[0]
+            if top_p['rank'] > top_rank + self.MAX_REACH:
+                continue
+            if len(pos_players) > 1:
+                gap = pos_players[1]['rank'] - top_p['rank']
+            else:
+                # Last player of the position: once gone, it's done
+                gap = self.MAX_REACH
+            score = gap - self.SCARCITY_PENALTY * (top_p['rank'] - top_rank)
+            if score > best_score:
+                best_score = score
+                best_player = top_p
+
+        return best_player['id'] if best_player else None
+
+
+class EliteTEStrategy(DraftStrategy):
+    """Elite TE strategy - lock in a top tight end early or punt the position"""
+
+    ELITE_TE_COUNT = 3      # top 3 TEs on the board count as "elite"
+    ELITE_MAX_REACH = 12    # only grab one if he's within this many spots of the board's top rank
+    ELITE_WINDOW_ROUNDS = 4
+    LATE_TE_ROUND = 10      # waited too long? take the best TE left from here on
+
+    def __init__(self):
+        super().__init__("Elite TE", "Lock in a top tight end early, or punt the position and take one late")
+
+    def __call__(self, available_players: List[dict], team_roster: TeamRoster) -> Optional[int]:
+        # First check if we need DST/K in final rounds
+        dst_k_pick = self._handle_dst_k_draft(available_players, team_roster)
+        if dst_k_pick:
+            return dst_k_pick
+
+        skill_players = self._filter_skill_position_players(available_players, team_roster)
+        if not skill_players:
+            return None
+
+        te_players = self._get_players_by_position(skill_players, 'TE')
+        te_count = team_roster.count_position(Position.TE)
+        current_round = team_roster.get_round_number()
+
+        top_rank = min(p['rank'] for p in skill_players)
+
+        # Early window, no TE yet: grab an elite TE if one is still on the
+        # board at a defensible price
+        if te_count == 0 and current_round <= self.ELITE_WINDOW_ROUNDS and te_players:
+            best_te = min(te_players, key=lambda p: p['rank'])
+            elite_ranks = sorted(p['rank'] for p in te_players)[:self.ELITE_TE_COUNT]
+            if best_te['rank'] in elite_ranks and best_te['rank'] <= top_rank + self.ELITE_MAX_REACH:
+                return best_te['id']
+
+        # Outside the elite window: never reach for a mid-tier TE. Build
+        # RB/WR instead and take the best TE left in the late window.
+        te_pick_allowed = te_count == 0 and current_round >= self.LATE_TE_ROUND
+        if not te_pick_allowed:
+            skill_players = [p for p in skill_players if p['position'] != 'TE']
+
+        if te_pick_allowed and te_players:
+            te_player = min(te_players, key=lambda p: p['rank'])
+            if team_roster.can_fill_position(Position.TE):
+                return te_player['id']
+
+        # BPA over the remaining pool (respecting QB rules)
+        if not self._should_draft_qb(team_roster):
+            skill_players = [p for p in skill_players if p['position'] != 'QB']
+
+        if not skill_players:
+            return None
+
+        return min(skill_players, key=lambda p: p['rank'])['id']
+
+
+class UpsideStrategy(DraftStrategy):
+    """Upside strategy - safe starters early, tier-break fliers in the middle, RB/WR stashes late"""
+
+    SAFE_ROUNDS = 3
+    UPSIDE_START_ROUND = 4
+    UPSIDE_END_ROUND = 9
+    FLIER_MAX_GAP = 12  # take the tier's last man only if he's close to the tier's best
+
+    def __init__(self):
+        super().__init__("Upside", "Safe starters early, tier-break fliers in the middle rounds, RB/WR stashes late")
+
+    def __call__(self, available_players: List[dict], team_roster: TeamRoster) -> Optional[int]:
+        # First check if we need DST/K in final rounds
+        dst_k_pick = self._handle_dst_k_draft(available_players, team_roster)
+        if dst_k_pick:
+            return dst_k_pick
+
+        skill_players = self._filter_skill_position_players(available_players, team_roster)
+        if not skill_players:
+            return None
+
+        # Filter out QBs if we shouldn't draft one
+        if not self._should_draft_qb(team_roster):
+            skill_players = [p for p in skill_players if p['position'] != 'QB']
+
+        if not skill_players:
+            return None
+
+        current_round = team_roster.get_round_number()
+
+        # Middle rounds: take the flier at the tier break - the last player
+        # of the best available tier carries the same expected value as the
+        # rest of the tier but is the classic breakout bet. Requires tier
+        # data; boards without tiers fall through to BPA.
+        tiered = [p for p in skill_players if p.get('tier') is not None]
+        if self.UPSIDE_START_ROUND <= current_round <= self.UPSIDE_END_ROUND and tiered:
+            best_tier = min(p['tier'] for p in tiered)
+            tier_players = sorted([p for p in tiered if p['tier'] == best_tier],
+                                  key=lambda p: p['rank'])
+            flier = tier_players[-1]
+            if flier['rank'] - tier_players[0]['rank'] <= self.FLIER_MAX_GAP:
+                return flier['id']
+
+        # Late rounds: stash volume-position upside over backup QB/TE types
+        if current_round > self.UPSIDE_END_ROUND:
+            fliers = [p for p in skill_players if p['position'] in ['RB', 'WR']]
+            if fliers:
+                return min(fliers, key=lambda p: p['rank'])['id']
+
+        return min(skill_players, key=lambda p: p['rank'])['id']
+
+
 # Strategy registry for easy access - updated with all strategies
 AVAILABLE_STRATEGIES = {
     "manual": None,  # Manual drafting - no strategy
@@ -905,6 +1116,10 @@ AVAILABLE_STRATEGIES = {
     "zero_rb": ZeroRBStrategy(),
     "late_qb": LateQBStrategy(),
     "early_qb": EarlyQBStrategy(),
+    "vbd": VBDStrategy(),
+    "scarcity": ScarcityStrategy(),
+    "elite_te": EliteTEStrategy(),
+    "upside": UpsideStrategy(),
 }
 
 

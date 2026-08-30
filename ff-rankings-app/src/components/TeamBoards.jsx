@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Users, Grid, List, Crown } from 'lucide-react';
-import { PlayerAvatar, FootballIcon } from './TeamVisual';
+import { PlayerAvatar, FootballIcon, TeamVisual } from './TeamVisual';
+import { Paper, Group, Text, SegmentedControl } from '@mantine/core';
 
 const TeamBoards = ({
   teams,
@@ -148,7 +149,7 @@ const TeamBoards = ({
       color: themeStyles.text.secondary
     },
     toggleButtonActive: {
-      backgroundColor: '#2563eb',
+      backgroundColor: 'var(--ffx-info)',
       color: '#ffffff'
     },
     // Teams view styles
@@ -166,7 +167,7 @@ const TeamBoards = ({
       transition: 'all 0.2s'
     },
     currentTeamCard: {
-      border: '2px solid #2563eb',
+      border: '2px solid var(--ffx-info)',
       boxShadow: '0 4px 12px rgba(37, 99, 235, 0.15)'
     },
     teamHeader: {
@@ -181,7 +182,7 @@ const TeamBoards = ({
       gap: '8px'
     },
     currentTeamHeader: {
-      color: '#2563eb',
+      color: 'var(--ffx-info)',
       backgroundColor: '#eff6ff',
       padding: '8px 12px',
       borderRadius: '6px',
@@ -214,7 +215,7 @@ const TeamBoards = ({
       border: themeStyles.rosterSlot.empty.border
     },
     rosterSlotKeeper: {
-      border: '2px solid #7c3aed',
+      border: '2px solid var(--ffx-accent)',
       boxShadow: '0 0 0 1px rgba(124, 58, 237, 0.2)'
     },
     slotPosition: {
@@ -244,7 +245,7 @@ const TeamBoards = ({
       top: '2px',
       right: '2px',
       fontSize: '10px',
-      color: '#7c3aed'
+      color: 'var(--ffx-accent)'
     },
     teamStats: {
       marginTop: '12px',
@@ -263,7 +264,7 @@ const TeamBoards = ({
       display: 'flex',
       justifyContent: 'space-between',
       marginBottom: '2px',
-      color: '#7c3aed',
+      color: 'var(--ffx-accent)',
       fontWeight: '600'
     },
     // Grid view styles
@@ -326,10 +327,10 @@ const TeamBoards = ({
       minWidth: '10px'
     },
     currentPickCell: {
-      backgroundColor: '#2563eb',
+      backgroundColor: 'var(--ffx-info)',
       color: '#ffffff',
       fontWeight: '600',
-      border: '2px solid #1d4ed8'
+      border: '2px solid var(--ffx-accent-strong)'
     },
     draftedPickCell: {
       backgroundColor: themeStyles.card.backgroundColor
@@ -339,7 +340,7 @@ const TeamBoards = ({
       opacity: 0.7
     },
     keeperPickCell: {
-      border: '2px solid #7c3aed',
+      border: '2px solid var(--ffx-accent)',
       backgroundColor: 'rgba(124, 58, 237, 0.1)'
     },
     pickNumber: {
@@ -389,7 +390,7 @@ const TeamBoards = ({
       top: '2px',
       right: '4px',
       fontSize: '10px',
-      color: '#7c3aed'
+      color: 'var(--ffx-accent)'
     }
   };
 
@@ -421,7 +422,7 @@ const TeamBoards = ({
                   alignItems: 'center',
                   gap: '4px',
                   fontSize: '12px',
-                  color: '#7c3aed'
+                  color: 'var(--ffx-accent)'
                 }}>
                   <Crown size={12} />
                   {stats.keeperCount}
@@ -437,7 +438,7 @@ const TeamBoards = ({
                     ...styles.rosterSlot,
                     ...(slot.player ? {
                       ...styles.rosterSlotFilled,
-                      backgroundColor: positionColors[slot.position] || '#6b7280'
+                      backgroundColor: positionColors[slot.position] || 'var(--ffx-text-3)'
                     } : styles.rosterSlotEmpty),
                     ...(slot.isKeeper ? styles.rosterSlotKeeper : {})
                   }}
@@ -455,10 +456,10 @@ const TeamBoards = ({
                   <div style={styles.slotPlayer}>
                     {slot.player ? (
                       <div style={styles.playerInSlot}>
-                        <PlayerAvatar
-                          playerName={slot.player.name}
-                          position={slot.player.position}
+                        <TeamVisual
+                          teamAbbr={slot.player.team}
                           size="small"
+                          style="logo"
                         />
                         <span style={{
                           whiteSpace: 'nowrap',
@@ -525,7 +526,7 @@ const TeamBoards = ({
                   key={teamIndex}
                   style={{
                     ...styles.gridHeaderCell,
-                    ...(isCurrentTeamCol ? { backgroundColor: '#eff6ff', color: '#2563eb' } : {})
+                    ...(isCurrentTeamCol ? { backgroundColor: '#eff6ff', color: 'var(--ffx-info)' } : {})
                   }}
                 >
                   <div style={{ fontWeight: '600', marginBottom: '2px' }}>
@@ -589,14 +590,19 @@ const TeamBoards = ({
                         <div style={styles.playerName}>
                           {pick.draftedPlayer.name}
                         </div>
-                        <div style={{
-                          ...styles.playerPosition,
-                          backgroundColor: positionColors[pick.draftedPlayer.position] || '#6b7280'
-                        }}>
-                          {pick.draftedPlayer.position}
-                        </div>
-                        <div style={styles.playerTeam}>
-                          {pick.draftedPlayer.team}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                          <div style={{
+                            ...styles.playerPosition,
+                            backgroundColor: positionColors[pick.draftedPlayer.position] || 'var(--ffx-text-3)',
+                            marginBottom: 0
+                          }}>
+                            {pick.draftedPlayer.position}
+                          </div>
+                          <TeamVisual
+                            teamAbbr={pick.draftedPlayer.team}
+                            size="small"
+                            style="logo"
+                          />
                         </div>
                       </div>
                     ) : pick.isCurrentPick ? (
@@ -631,41 +637,28 @@ const TeamBoards = ({
   );
 
   return (
-    <div style={styles.card}>
+    <Paper withBorder radius="lg" p="lg" mb="md" style={{ boxShadow: 'var(--ffx-shadow-sm)' }}>
       {/* Header with view toggle */}
-      <div style={styles.header}>
-        <h2 style={styles.title}>
-          <Users size={24} />
+      <Group justify="space-between" align="center" mb="lg" wrap="nowrap">
+        <Text size="lg" fw={600}>
           {viewMode === 'teams' ? 'Team Rosters' : 'Draft Board'}
-        </h2>
+        </Text>
 
-        <div style={styles.viewToggle}>
-          <button
-            onClick={() => setViewMode('teams')}
-            style={{
-              ...styles.toggleButton,
-              ...(viewMode === 'teams' ? styles.toggleButtonActive : {})
-            }}
-          >
-            <List size={14} />
-            Teams
-          </button>
-          <button
-            onClick={() => setViewMode('grid')}
-            style={{
-              ...styles.toggleButton,
-              ...(viewMode === 'grid' ? styles.toggleButtonActive : {})
-            }}
-          >
-            <Grid size={14} />
-            Grid
-          </button>
-        </div>
-      </div>
+        <SegmentedControl
+          value={viewMode}
+          onChange={setViewMode}
+          color="teal"
+          size="xs"
+          data={[
+            { value: 'teams', label: 'Rosters' },
+            { value: 'grid', label: 'Board' },
+          ]}
+        />
+      </Group>
 
       {/* Content based on view mode */}
       {viewMode === 'teams' ? renderTeamsView() : renderGridView()}
-    </div>
+    </Paper>
   );
 };
 

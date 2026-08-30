@@ -1,7 +1,7 @@
 // Updated DraftTracker.jsx with unified player state
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { ThemeProvider, useTheme } from './ThemeContext';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useTheme } from './ThemeContext';
 import FileUpload from './FileUpload';
 import PlayerList from './PlayerList';
 import TeamBoards from './TeamBoards';
@@ -10,6 +10,10 @@ import SettingsPanel from './SettingsPanel';
 import KeeperModePanel from './KeeperModePanel';
 import { TEAM_MAPPING_FILES, RANKING_SOURCES, findSourceByFile } from '../rankings/sources';
 import { resolveIdentity, isPlayerTaken } from '../rankings/availability';
+import { inferTeamBoards } from '../rankings/inferRanking';
+import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Modal, Badge, Text, Group } from '@mantine/core';
 
 // Split a single CSV line respecting double-quoted fields (quoted fields may
 // contain commas; surrounding quotes are stripped; "" escapes to "). Comma-free
@@ -107,8 +111,14 @@ const DraftTrackerContent = () => {
     QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DST: 1, K: 1, BENCH: 6
   });
   const [positionColors, setPositionColors] = useState({
-    QB: '#dc2626', RB: '#16a34a', WR: '#2563eb', TE: '#ca8a04',
-    FLEX: '#7c3aed', DST: '#374151', K: '#ea580c', BENCH: '#6b7280'
+    QB: '#dc2626',
+    RB: '#16a34a',
+    WR: '#2563eb',
+    TE: '#ca8a04',
+    FLEX: '#7c3aed',
+    DST: '#374151',
+    K: '#ea580c',
+    BENCH: '#6b7280'
   });
 
   // Keeper mode
@@ -133,7 +143,7 @@ const DraftTrackerContent = () => {
   // Availability prediction
   const [showAvailabilityPrediction, setShowAvailabilityPrediction] = useState(false);
   const [availabilityPredictions, setAvailabilityPredictions] = useState({});
-  const [predictionTrials, setPredictionTrials] = useState(100);
+  const [predictionTrials, setPredictionTrials] = useState(50);
   const [isPredicting, setIsPredicting] = useState(false);
   const [lastPredictionTime, setLastPredictionTime] = useState(null);
 
@@ -159,7 +169,7 @@ const DraftTrackerContent = () => {
   // Check PyScript readiness
   useEffect(() => {
     const checkPyScript = () => {
-      if (window.pyAutoDraft && window.pyPredictAvailability) {
+      if (window.pyAutoDraft && window.pyPredictAvailability && window.pyInferStrategies) {
         setIsPyScriptReady(true);
         return true;
       }
@@ -284,7 +294,31 @@ const DraftTrackerContent = () => {
       if (savedState.currentDraftPick !== undefined) setCurrentDraftPick(savedState.currentDraftPick);
       if (savedState.numTeams !== undefined) setNumTeams(savedState.numTeams);
       if (savedState.rosterSettings !== undefined) setRosterSettings(savedState.rosterSettings);
-      if (savedState.positionColors !== undefined) setPositionColors(savedState.positionColors);
+      if (savedState.positionColors !== undefined) {
+        // Guard against the earlier build that stored CSS var() strings as
+        // values - those are not parseable colors and break ColorInput.
+        const savedColors = savedState.positionColors;
+        const sanitized = {};
+        let poisoned = false;
+        for (const [k, v] of Object.entries(savedColors)) {
+          if (typeof v === 'string' && v.includes('var(')) {
+            poisoned = true;
+            continue;
+          }
+          sanitized[k] = v;
+        }
+        if (poisoned) {
+          sanitized.QB = sanitized.QB || '#dc2626';
+          sanitized.RB = sanitized.RB || '#16a34a';
+          sanitized.WR = sanitized.WR || '#2563eb';
+          sanitized.TE = sanitized.TE || '#ca8a04';
+          sanitized.FLEX = sanitized.FLEX || '#7c3aed';
+          sanitized.DST = sanitized.DST || '#374151';
+          sanitized.K = sanitized.K || '#ea580c';
+          sanitized.BENCH = sanitized.BENCH || '#6b7280';
+        }
+        setPositionColors(prev => ({ ...prev, ...sanitized }));
+      }
       if (savedState.autoDraftSettings !== undefined) setAutoDraftSettings(savedState.autoDraftSettings);
       if (savedState.teamRankingProfile !== undefined) setTeamRankingProfile(savedState.teamRankingProfile);
       if (savedState.teamVariability !== undefined) setTeamVariability(savedState.teamVariability);
@@ -789,7 +823,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
           console.log('🎯 Players state updated, UI should now show draft interface');
         } catch (error) {
           console.error('❌ CSV parsing error:', error);
-          alert('Error parsing CSV: ' + error.message);
+          toast.error('Error parsing CSV: ' + error.message);
         }
       };
       reader.readAsText(file);
@@ -825,7 +859,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     const player = players[playerId];
     if (!player) {
       console.error('❌ Player not found:', playerId, 'Available players:', Object.keys(players));
-      alert(`Player with ID ${playerId} not found!`);
+      toast.error(`Player with ID ${playerId} not found!`);
       return;
     }
 
@@ -834,13 +868,13 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     // Check if we're trying to draft at a keeper position
     const keeperAtCurrentPick = isCurrentPickKeeper();
     if (keeperAtCurrentPick && playerId !== keeperAtCurrentPick.id) {
-      alert(`This pick is reserved for keeper: ${keeperAtCurrentPick.name}`);
+      toast.warning(`This pick is reserved for keeper: ${keeperAtCurrentPick.name}`);
       return;
     }
 
     // Check if this player is already drafted/keeper
     if (player.status !== 'available') {
-      alert(`${player.name} has already been drafted or is a keeper.`);
+      toast.warning(`${player.name} has already been drafted or is a keeper.`);
       return;
     }
 
@@ -1038,7 +1072,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     return delays[draftSpeed] || 500;
   };
 
-  const executeLocalFallback = (availablePlayersList, strategy) => {
+  const executeLocalFallback = (availablePlayersList, strategy, teamRoster) => {
     if (!availablePlayersList.length) return null;
 
     // Filter out avoided players
@@ -1047,13 +1081,51 @@ const createTeamMappingFromPreloadedCSVs = async () => {
 
     switch (strategy) {
       case 'bpa':
+      case 'vbd':
         return playersToConsider.sort((a, b) => a.rank - b.rank)[0]?.id;
       case 'tier':
+      case 'upside': {
         const tieredPlayers = playersToConsider.filter(p => p.tier);
         if (tieredPlayers.length) {
           return tieredPlayers.sort((a, b) => a.tier - b.tier || a.rank - b.rank)[0]?.id;
         }
         return playersToConsider.sort((a, b) => a.rank - b.rank)[0]?.id;
+      }
+      case 'scarcity': {
+        const byPos = {};
+        playersToConsider.forEach(p => {
+          (byPos[p.position] = byPos[p.position] || []).push(p);
+        });
+        const ranks = playersToConsider.map(p => p.rank);
+        const topRank = Math.min(...ranks);
+        let best = null;
+        let bestScore = -Infinity;
+        Object.values(byPos).forEach(posPlayers => {
+          posPlayers.sort((a, b) => a.rank - b.rank);
+          const top = posPlayers[0];
+          const gap = posPlayers.length > 1 ? posPlayers[1].rank - top.rank : 25;
+          const score = gap - 0.35 * (top.rank - topRank);
+          if (score > bestScore) {
+            bestScore = score;
+            best = top;
+          }
+        });
+        return best?.id;
+      }
+      case 'elite_te': {
+        const tePlayers = playersToConsider.filter(p => p.position === 'TE');
+        const rosterTEs = (teamRoster?.roster || []).filter(slot => {
+          const pos = slot.player?.position;
+          return (slot.position === 'TE' && slot.player) || (['FLEX', 'BENCH'].includes(slot.position) && slot.player?.position === 'TE');
+        }).length;
+        const bestTE = tePlayers.sort((a, b) => a.rank - b.rank)[0];
+        const round = Math.floor(((teamRoster?.roster || []).filter(s => s.player).length)) + 1;
+        if (bestTE && rosterTEs === 0 && round <= 10) {
+          return bestTE.id;
+        }
+        return playersToConsider.filter(p => p.position !== 'TE').sort((a, b) => a.rank - b.rank)[0]?.id ??
+          playersToConsider.sort((a, b) => a.rank - b.rank)[0]?.id;
+      }
       default:
         return playersToConsider.sort((a, b) => a.rank - b.rank)[0]?.id;
     }
@@ -1157,7 +1229,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
             draftPlayer(result.player_id);
           } else {
             console.log("Falling Back - Error in autodraft strategy!");
-            const fallbackPlayer = executeLocalFallback(availablePlayers, teamStrategy);
+            const fallbackPlayer = executeLocalFallback(availablePlayers, teamStrategy, currentTeamData);
             if (fallbackPlayer) draftPlayer(fallbackPlayer);
           }
         } catch (error) {
@@ -1212,7 +1284,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
           draftProfilePick(picked);
         } else {
           console.log("Falling Back - Error in autodraft strategy!");
-          const fbId = executeLocalFallback(profileAvailable, teamStrategy);
+          const fbId = executeLocalFallback(profileAvailable, teamStrategy, currentTeamData);
           const picked = fbId ? (profileAvailable.find(p => p.id === fbId) || profileBoard.find(p => p.id === fbId)) : null;
           if (picked) draftProfilePick(picked);
         }
@@ -1233,6 +1305,15 @@ const createTeamMappingFromPreloadedCSVs = async () => {
 
     setIsPredicting(true);
     try {
+      // Strategy-aware: every opponent with a known strategy (manually set or
+      // inferred) drafts with it in the simulation; unknown ones use the mix.
+      const teamStrategies = {};
+      for (let i = 1; i <= numTeams; i++) {
+        if (i === currentTeam) continue;
+        const s = autoDraftSettings[i];
+        if (s && s !== 'manual') teamStrategies[i] = s;
+      }
+
       const resultJson = window.pyPredictAvailability(
         JSON.stringify(availablePlayers),
         JSON.stringify(teams),
@@ -1241,7 +1322,8 @@ const createTeamMappingFromPreloadedCSVs = async () => {
         numTeams,
         draftStyle,
         predictionTrials,
-        JSON.stringify(teamVariability)
+        JSON.stringify(teamVariability),
+        JSON.stringify(teamStrategies)
       );
 
       const result = JSON.parse(resultJson);
@@ -1256,6 +1338,109 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     }
   };
 
+  // Strategy + ranking auto-detection from each team's actual picks. Runs the
+  // Python replay (strategies) and the JS board replay (rankings), then
+  // hot-swaps both per-team settings so autodraft and predictions reflect
+  // the league's real behavior. Results carry a confidence score; only
+  // teams with enough picks get strategy assignments.
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [inferredMeta, setInferredMeta] = useState({});
+
+  const detectAllTeams = useCallback(async () => {
+    if (!isPyScriptReady || isDetecting) return null;
+    const picks = draftedPlayers.filter(p => p.draftInfo?.pickNumber && p.draftInfo?.teamId);
+    if (picks.length === 0) {
+      toast.warning('Draft some players first - detection needs at least one pick per team.');
+      return null;
+    }
+
+    setIsDetecting(true);
+    try {
+      const boardJson = JSON.stringify(availablePlayers.concat(draftedPlayers).map(p => ({
+        id: p.id, name: p.name, position: p.position, team: p.team, rank: p.rank, tier: p.tier
+      })));
+      const picksJson = JSON.stringify(picks.map(p => ({
+        teamId: p.draftInfo.teamId,
+        pickNumber: p.draftInfo.pickNumber,
+        id: p.id, name: p.name, position: p.position, rank: p.rank, tier: p.tier
+      })));
+
+      // 1) Strategy inference (Python replay over the global pick sequence)
+      let strategyResults = {};
+      try {
+        const res = window.pyInferStrategies(picksJson, boardJson, '{}');
+        const parsed = JSON.parse(res);
+        if (!parsed.error) strategyResults = parsed;
+      } catch (e) {
+        console.error('Strategy inference failed:', e);
+      }
+
+      // 2) Ranking-board inference (JS replay per candidate board)
+      const boardCandidates = Object.entries(rankingProfileBoards)
+        .filter(([, boardPlayers]) => boardPlayers && boardPlayers.length > 0)
+        .map(([id, boardPlayers]) => ({
+          id,
+          label: RANKING_SOURCES.find(s => s.id === id)?.label || id,
+          players: boardPlayers,
+        }));
+      let boardResults = {};
+      if (boardCandidates.length > 0) {
+        try {
+          boardResults = inferTeamBoards(draftedPlayers, boardCandidates);
+        } catch (e) {
+          console.error('Ranking inference failed:', e);
+        }
+      }
+
+      // 3) Hot-swap: apply high-confidence strategies and best-fit boards.
+      // Skip teams whose strategy is explicitly 'manual' but already drafted:
+      // every team with picks gets a strategy unless confidence is too low.
+      const CONFIDENCE_FLOOR = 0.25;
+      const newStrategies = {};
+      const newProfiles = {};
+      const meta = {};
+      for (const [teamIdStr, r] of Object.entries(strategyResults)) {
+        if (!r || r.error) continue;
+        const teamId = Number(teamIdStr);
+        meta[teamId] = {
+          strategy: r.inferred_strategy,
+          confidence: r.confidence,
+          meanGap: r.mean_gap,
+          picksAnalyzed: r.picks_analyzed,
+          board: boardResults[teamId]?.boardId || null,
+          boardLabel: boardResults[teamId]?.label || null,
+        };
+        if (r.confidence >= CONFIDENCE_FLOOR && r.inferred_strategy) {
+          newStrategies[teamId] = r.inferred_strategy;
+        }
+        if (boardResults[teamId]?.boardId) {
+          newProfiles[teamId] = boardResults[teamId].boardId;
+        }
+      }
+      if (Object.keys(newStrategies).length > 0) {
+        setAutoDraftSettings(prev => ({ ...prev, ...newStrategies }));
+      }
+      if (Object.keys(newProfiles).length > 0) {
+        setTeamRankingProfile(prev => ({ ...prev, ...newProfiles }));
+      }
+      setInferredMeta(meta);
+
+      const applied = Object.keys(newStrategies).length;
+      const boardsApplied = Object.keys(newProfiles).length;
+      if (applied === 0 && boardsApplied === 0) {
+        toast.warning('Could not infer strategies with confidence yet - more picks will help.');
+      } else {
+        toast.success(`Inferred ${applied} strategy assignment(s) and ${boardsApplied} ranking board(s) from ${picks.length} picks.`, {
+          description: 'Adjust or override any team in the settings below.',
+          duration: 6000,
+        });
+      }
+      return { strategyResults, boardResults, meta };
+    } finally {
+      setIsDetecting(false);
+    }
+  }, [isPyScriptReady, isDetecting, draftedPlayers, availablePlayers, rankingProfileBoards, setAutoDraftSettings, setTeamRankingProfile]);
+
   // Auto-predict when it's a manual team's turn
   useEffect(() => {
     if (isPyScriptReady && showAvailabilityPrediction && !isPredicting &&
@@ -1268,6 +1453,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
   }, [currentDraftPick, currentTeam, showAvailabilityPrediction, isDraftRunning]);
 
   // Quick draft keyboard shortcut
+  const quickDraftInputRef = useRef(null);
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -1284,6 +1470,25 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Put the caret in the search box as soon as the modal mounts. Mantine
+  // renders the portal a tick after `opened` flips true, so poll briefly
+  // until the input exists instead of racing it with a single timeout.
+  useEffect(() => {
+    if (!showQuickDraft) return;
+    let attempts = 0;
+    const focusWhenReady = () => {
+      const el = document.getElementById('quick-draft-search');
+      if (el) {
+        el.focus();
+        el.select?.();
+      } else if (attempts++ < 40) {
+        setTimeout(focusWhenReady, 25);
+      }
+    };
+    focusWhenReady();
+    return () => { attempts = 40; };
+  }, [showQuickDraft]);
 
   // Generate teams with roster slots - UPDATED to work with unified state
   const teams = useMemo(() => {
@@ -1428,17 +1633,25 @@ const createTeamMappingFromPreloadedCSVs = async () => {
 
   // Quick draft players (updated for unified state)
   const quickDraftPlayers = useMemo(() => {
-    if (!quickDraftQuery || quickDraftQuery.length < 2) return { undrafted: [], drafted: [] };
+    // Filtering uses precomputed lowercase keys, so even a 1-char query costs
+    // ~0.02ms over a 600-player board - no length gate needed. (The compact
+    // spaces-for-periods path still needs 2+ chars: a single letter would
+    // match every "J." initial and flood the results.)
+    if (!quickDraftQuery || quickDraftQuery.length < 1) return { undrafted: [], drafted: [] };
 
     const searchLower = quickDraftQuery.toLowerCase();
+    const compactQuery = searchLower.replace(/[^a-z0-9]/g, '');
     const undraftedPlayers = [];
     const draftedMatchingPlayers = [];
 
     for (let i = 0; i < playerArray.length && (undraftedPlayers.length < 8 || draftedMatchingPlayers.length < 8); i++) {
       const player = playerArray[i];
-      const matchesSearch = player.name.toLowerCase().includes(searchLower) ||
+      const nameLower = player.name.toLowerCase();
+      const matchesSearch = nameLower.includes(searchLower) ||
                           player.team.toLowerCase().includes(searchLower) ||
-                          player.position.toLowerCase().includes(searchLower);
+                          player.position.toLowerCase().includes(searchLower) ||
+                          // Tolerate spaces-for-periods ("a.j. brown" -> "aj brown")
+                          (compactQuery.length >= 2 && nameLower.replace(/[^a-z0-9]/g, '').includes(compactQuery));
 
       if (matchesSearch) {
         if (player.status === 'available' && undraftedPlayers.length < 8) {
@@ -1505,6 +1718,19 @@ const createTeamMappingFromPreloadedCSVs = async () => {
           e.preventDefault();
           setSelectedPlayerIndex(prev => prev > 0 ? prev - 1 : 0);
           break;
+        // emacs-style movement: C-n next, C-p previous
+        case 'n':
+          if (e.ctrlKey) {
+            e.preventDefault();
+            setSelectedPlayerIndex(prev => prev < totalUndrafted - 1 ? prev + 1 : prev);
+          }
+          break;
+        case 'p':
+          if (e.ctrlKey) {
+            e.preventDefault();
+            setSelectedPlayerIndex(prev => prev > 0 ? prev - 1 : 0);
+          }
+          break;
         case 'Enter':
           e.preventDefault();
           if (selectedPlayerIndex >= 0 && selectedPlayerIndex < totalUndrafted) {
@@ -1530,40 +1756,26 @@ const createTeamMappingFromPreloadedCSVs = async () => {
     };
 
     return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000
-      }} onClick={() => setShowQuickDraft(false)}>
-        <div style={{
-          backgroundColor: themeStyles.card.backgroundColor,
-          border: themeStyles.card.border,
-          borderRadius: '12px',
-          padding: '24px',
-          maxWidth: '500px',
-          width: '90%',
-          maxHeight: '80vh',
-          overflow: 'hidden'
-        }} onClick={(e) => e.stopPropagation()}>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', color: themeStyles.text.primary, margin: 0 }}>
-              Quick Draft
-            </h3>
-            <button onClick={() => setShowQuickDraft(false)} style={{
-              background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer',
-              color: themeStyles.text.secondary
-            }}>
-              ✕
-            </button>
-          </div>
+      <Modal
+        opened={showQuickDraft}
+        onClose={() => setShowQuickDraft(false)}
+        title={<span style={{ fontSize: '18px', fontWeight: 600, color: themeStyles.text.primary }}>Quick Draft</span>}
+        size={500}
+        radius="lg"
+        centered
+        styles={{
+          content: {
+            backgroundColor: themeStyles.card.backgroundColor,
+            border: themeStyles.card.border,
+          },
+          header: {
+            backgroundColor: themeStyles.card.backgroundColor,
+            borderBottom: 'none',
+          },
+          close: { color: themeStyles.text.secondary },
+        }}
+      >
+          <div style={{ outline: 'none' }}>
 
           <div style={{
             fontSize: '14px',
@@ -1576,17 +1788,19 @@ const createTeamMappingFromPreloadedCSVs = async () => {
             <div style={{ marginBottom: '4px' }}>
               <strong>Current Pick:</strong> {currentDraftPick} - {teamNames[currentTeam] || `Team ${currentTeam}`}
               {isCurrentPickKeeper() && (
-                <span style={{ marginLeft: '8px', color: '#7c3aed', fontWeight: '600' }}>
+                <span style={{ marginLeft: '8px', color: 'var(--ffx-accent)', fontWeight: '600' }}>
                   👑 KEEPER: {isCurrentPickKeeper().name}
                 </span>
               )}
             </div>
             <div style={{ fontSize: '12px', color: themeStyles.text.muted }}>
-              <strong>Hotkeys:</strong> ↑↓ navigate • Enter draft • Shift+W watch • Shift+A avoid • Esc close
+              <strong>Hotkeys:</strong> ↑↓ or C-n/C-p navigate • Enter draft • Shift+W watch • Shift+A avoid • Esc close
             </div>
           </div>
 
           <input
+            ref={quickDraftInputRef}
+            id="quick-draft-search"
             type="text"
             placeholder="Search players to draft..."
             value={quickDraftQuery}
@@ -1641,7 +1855,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
                         borderRadius: '6px',
                         cursor: 'pointer',
                         marginBottom: '2px',
-                        backgroundColor: isSelected ? '#2563eb' : (
+                        backgroundColor: isSelected ? 'var(--ffx-info)' : (
                           isWatched ? `${watchHighlightColor}30` :
                           isAvoided ? `${avoidHighlightColor}30` : 'transparent'
                         ),
@@ -1732,8 +1946,8 @@ const createTeamMappingFromPreloadedCSVs = async () => {
                             fontSize: '10px',
                             fontWeight: '500',
                             transition: 'all 0.2s',
-                            backgroundColor: isSelected ? 'rgba(255,255,255,0.9)' : '#16a34a',
-                            color: isSelected ? '#2563eb' : '#ffffff'
+                            backgroundColor: isSelected ? 'rgba(255,255,255,0.9)' : 'var(--ffx-accent)',
+                            color: isSelected ? 'var(--ffx-info)' : '#ffffff'
                           }}
                           title="Draft (Enter key)"
                         >
@@ -1780,7 +1994,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: '500', marginBottom: '4px', textDecoration: 'line-through' }}>
                         {player.name}
-                        {player.status === 'keeper' && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#7c3aed' }}>👑</span>}
+                        {player.status === 'keeper' && <span style={{ marginLeft: '8px', fontSize: '12px', color: 'var(--ffx-accent)' }}>👑</span>}
                       </div>
                       <div style={{ fontSize: '12px' }}>
                         {player.position} • {player.team} • #{player.rank}
@@ -1795,7 +2009,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
               </>
             )}
 
-            {quickDraftQuery.length >= 2 && quickDraftPlayers.undrafted?.length === 0 && quickDraftPlayers.drafted?.length === 0 && (
+            {quickDraftQuery.length >= 1 && quickDraftPlayers.undrafted?.length === 0 && quickDraftPlayers.drafted?.length === 0 && (
               <div style={{
                 textAlign: 'center',
                 color: themeStyles.text.muted,
@@ -1805,18 +2019,18 @@ const createTeamMappingFromPreloadedCSVs = async () => {
               </div>
             )}
 
-            {quickDraftQuery.length < 2 && (
+            {quickDraftQuery.length < 1 && (
               <div style={{
                 textAlign: 'center',
                 color: themeStyles.text.muted,
                 padding: '40px 20px'
               }}>
-                Type at least 2 characters to search...
+                Start typing to search...
               </div>
             )}
           </div>
-        </div>
-      </div>
+          </div>
+      </Modal>
     );
   };
 
@@ -1826,14 +2040,15 @@ const createTeamMappingFromPreloadedCSVs = async () => {
       maxWidth: '1400px',
       margin: '0 auto',
       padding: '24px',
-      minHeight: '100vh',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
+      minHeight: '100vh'
     },
     stickyHeader: {
       position: 'sticky',
       top: '0',
       zIndex: 100,
-      backgroundColor: themeStyles.container.backgroundColor,
+      backgroundColor: themeStyles.headerGlass.backgroundColor,
+      backdropFilter: themeStyles.headerGlass.backdropFilter,
+      WebkitBackdropFilter: themeStyles.headerGlass.WebkitBackdropFilter,
       borderBottom: `1px solid ${themeStyles.border}`,
       padding: '12px 0',
       marginBottom: '24px'
@@ -1843,7 +2058,7 @@ const createTeamMappingFromPreloadedCSVs = async () => {
       alignItems: 'center',
       justifyContent: 'center',
       padding: '8px 16px',
-      backgroundColor: '#2563eb',
+      backgroundColor: 'var(--ffx-info)',
       color: '#ffffff',
       borderRadius: '8px',
       fontSize: '16px',
@@ -1869,75 +2084,70 @@ const createTeamMappingFromPreloadedCSVs = async () => {
 
   return (
     <div style={styles.container}>
-      <QuickDraftModal />
+      {QuickDraftModal()}
 
       {/* Sticky Header */}
       {Object.keys(players).length > 0 && (
         <div style={styles.stickyHeader}>
-          <div style={styles.headerContent}>
-            <div style={styles.pyScriptStatus}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap'
+          }}>
+            <Group gap="sm" wrap="nowrap">
               {isPyScriptReady ? (
-                <>
-                  <span style={{ color: '#16a34a' }}>🐍</span>
-                  PyScript Ready
-                </>
+                <Badge size="sm" variant="light" color="teal" leftSection="🐍">
+                  Engine ready
+                </Badge>
               ) : (
-                <>
-                  <span style={{ color: '#f59e0b' }}>⏳</span>
-                  Loading...
-                </>
+                <Badge size="sm" variant="light" color="yellow">
+                  <motion.span
+                    style={{ display: 'inline-block' }}
+                    animate={{ opacity: [1, 0.35, 1] }}
+                    transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+                  >
+                    🐍 Loading Python engine...
+                  </motion.span>
+                </Badge>
               )}
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {isKeeperMode && (
-                <div style={{
-                  fontSize: '12px',
-                  color: 'rgba(255, 255, 255, 0.8)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  👑 {keepers.length} Keepers
-                </div>
+                <Badge size="sm" variant="light" color="grape">👑 {keepers.length} keepers</Badge>
               )}
+              {currentCSVSource && (
+                <Text size="xs" c="dimmed" visibleFrom="md" truncate="end" maw={220}>
+                  {currentCSVSource}
+                </Text>
+              )}
+            </Group>
 
-              {(() => {
-                const keeperPick = isCurrentPickKeeper();
-                if (keeperPick) {
-                  return (
-                    <div style={{
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#fbbf24',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}>
-                      👑 KEEPER: {keeperPick.name}
-                    </div>
-                  );
-                } else {
-                  return (
-                    <span>
-                      📍 Pick {currentDraftPick} - {teamNames[currentTeam] || `Team ${currentTeam}`} On The Clock
-                    </span>
-                  );
-                }
-              })()}
-            </div>
-
-            {currentCSVSource && (
-              <div style={styles.csvSourceIndicator}>
-                Using: {currentCSVSource}
-              </div>
-            )}
+            {(() => {
+              const keeperPick = isCurrentPickKeeper();
+              if (keeperPick) {
+                return (
+                  <Badge size="lg" variant="light" color="grape" style={{ fontWeight: 600 }}>
+                    👑 KEEPER: {keeperPick.name}
+                  </Badge>
+                );
+              }
+              return (
+                <Badge
+                  size="lg"
+                  variant="gradient"
+                  gradient={{ from: 'teal', to: 'green', deg: 90 }}
+                  style={{ fontWeight: 600, letterSpacing: '0.01em' }}
+                >
+                  Pick {currentDraftPick} · {teamNames[currentTeam] || `Team ${currentTeam}`} on the clock
+                </Badge>
+              );
+            })()}
           </div>
 
           {/* Save Message */}
           {showSaveMessage && (
             <div style={{
-              backgroundColor: '#16a34a',
+              backgroundColor: 'var(--ffx-accent)',
               color: '#ffffff',
               padding: '8px 16px',
               borderRadius: '6px',
@@ -1961,6 +2171,37 @@ const createTeamMappingFromPreloadedCSVs = async () => {
           setIsDragOver={setIsDragOver}
           themeStyles={themeStyles}
         />
+      )}
+
+      {/* Engine loading skeleton: while Pyodide boots, hint that auto-draft
+          and predictions are coming online rather than showing a dead UI */}
+      {!isPyScriptReady && Object.keys(players).length > 0 && (
+        <div style={{
+          ...themeStyles.card,
+          borderRadius: '8px',
+          padding: '14px 20px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <motion.div
+            style={{
+              width: 22, height: 22, borderRadius: '50%',
+              border: '3px solid rgba(150, 150, 150, 0.25)',
+              borderTopColor: 'var(--ffx-accent)'
+            }}
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
+          />          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: themeStyles.text.primary }}>
+              Loading auto-draft engine...
+            </div>
+            <div style={{ fontSize: '11px', color: themeStyles.text.muted }}>
+              Manual picking works now. Auto-draft, likelihood predictions and strategy detection unlock when this finishes (~10MB Python runtime, one-time).
+            </div>
+          </div>
+        </div>
       )}
 
       {Object.keys(players).length > 0 && (
@@ -2037,6 +2278,9 @@ const createTeamMappingFromPreloadedCSVs = async () => {
             setTeamRankingProfile={setTeamRankingProfile}
             rankingProfiles={RANKING_SOURCES}
             defaultRankingProfileId={defaultRankingProfileId}
+            detectAllTeams={detectAllTeams}
+            isDetecting={isDetecting}
+            inferredMeta={inferredMeta}
             draftStats={draftStats}
             draftedPlayers={draftedPlayers}
             players={playerArray}
@@ -2123,11 +2367,9 @@ const createTeamMappingFromPreloadedCSVs = async () => {
 };
 
 const DraftTracker = () => {
-  return (
-    <ThemeProvider>
-      <DraftTrackerContent />
-    </ThemeProvider>
-  );
+  // ThemeProvider is provided at the app root (main.jsx) so App-level
+  // consumers (Toaster theme, html class sync) can read it too.
+  return <DraftTrackerContent />;
 };
 
 export default DraftTracker;
