@@ -344,11 +344,13 @@ const TeamBoards = ({
       backgroundColor: 'rgba(124, 58, 237, 0.1)'
     },
     pickNumber: {
-      fontSize: '10px',
+      fontSize: '9px',
       color: themeStyles.text.muted,
       position: 'absolute',
-      top: '2px',
-      left: '4px'
+      bottom: '2px',
+      right: '4px',
+      lineHeight: 1,
+      zIndex: 1,
     },
     currentPickNumber: {
       color: 'rgba(255, 255, 255, 0.8)'
@@ -569,7 +571,7 @@ const TeamBoards = ({
 
                 return (
                   <td key={pick.pickNumber} style={cellStyle}>
-                    {/* Pick Number */}
+                    {/* Pick Number - bottom-right so it never overlaps the name/logo */}
                     <div style={pick.isCurrentPick ?
                       { ...styles.pickNumber, ...styles.currentPickNumber } :
                       styles.pickNumber
@@ -590,7 +592,7 @@ const TeamBoards = ({
                         <div style={styles.playerName}>
                           {pick.draftedPlayer.name}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', paddingRight: '20px' }}>
                           <div style={{
                             ...styles.playerPosition,
                             backgroundColor: positionColors[pick.draftedPlayer.position] || 'var(--ffx-text-3)',

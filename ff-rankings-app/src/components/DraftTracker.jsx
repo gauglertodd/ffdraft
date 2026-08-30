@@ -108,7 +108,7 @@ const DraftTrackerContent = () => {
   // League settings
   const [numTeams, setNumTeams] = useState(12);
   const [rosterSettings, setRosterSettings] = useState({
-    QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DST: 1, K: 1, BENCH: 6
+    QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DST: 1, K: 1, BENCH: 5
   });
   const [positionColors, setPositionColors] = useState({
     QB: '#dc2626',

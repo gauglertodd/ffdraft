@@ -48,7 +48,7 @@ const SettingsPanel = ({
   players,
   themeStyles
 }) => {
-  const [activeTab, setActiveTab] = useState('league');
+  const [activeTab, setActiveTab] = useState('auto-draft');
   const [isExpanded, setIsExpanded] = useState(false);
   const inputRefs = useRef({});
 
@@ -546,7 +546,7 @@ const SettingsPanel = ({
                 size="lg"
                 radius="xl"
                 color="teal"
-                bg="var(--mantine-color-dark-4)"
+                bg="var(--ffx-surface-alt)"
               />
               <Text
                 size="xs"
@@ -554,7 +554,14 @@ const SettingsPanel = ({
                 style={{
                   position: 'absolute', inset: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: pct > 45 ? '#fff' : 'inherit',
+                  // Label sits on both fill (teal) and track (surface) - give
+                  // it its own contrast surface so it never goes black-on-black
+                  // or white-on-white at any fill level.
+                  color: '#0b1220',
+                  backgroundColor: 'rgba(255, 255, 255, 0.72)',
+                  borderRadius: 999,
+                  padding: '0 8px',
+                  backdropFilter: 'blur(2px)',
                 }}
               >
                 {stats.drafted} / {stats.total}
