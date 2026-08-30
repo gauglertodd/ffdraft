@@ -733,7 +733,7 @@ const PlayerList = ({
                 {position} ({positionPlayers.length})
               </div>
               <div style={styles.positionPlayersList}>
-                <AnimatePresence initial={false}>
+                <AnimatePresence initial={false} popLayout mode="popLayout">
                 {positionPlayers.map((player) => {
                   const isDrafted = player.status !== 'available';
                   const isUndrafted = !isDrafted;
@@ -743,11 +743,16 @@ const PlayerList = ({
                   return (
                     <motion.div
                       key={player.id}
-                      layout
+                      layout="position"
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: isDrafted ? 0.5 : 1 }}
-                      exit={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, overflow: 'hidden' }}
-                      transition={{ type: 'spring', stiffness: 350, damping: 32 }}
+                      exit={{ opacity: 0, height: 0, minHeight: 0, paddingTop: 0, paddingBottom: 0, marginTop: 0, marginBottom: 0, borderBottom: '1px solid transparent', overflow: 'hidden' }}
+                      transition={{
+                        // Exiting rows must vanish fast so they don't paint
+                        // over neighbors while the list reflows.
+                        height: { duration: 0.18, ease: 'easeOut' },
+                        default: { duration: 0.18, ease: 'easeOut' },
+                      }}
                       style={getPlayerRowStyle(
                         isCondensedMode ? styles.compactPlayerRowCondensed : styles.compactPlayerRow,
                         player
@@ -947,7 +952,7 @@ const PlayerList = ({
 
     return (
       <div style={styles.playersList}>
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} popLayout mode="popLayout">
         {playersToShow.map((player) => {
           const isDrafted = player.status !== 'available';
           const isUndrafted = !isDrafted;
@@ -960,11 +965,14 @@ const PlayerList = ({
           return (
             <motion.div
               key={player.id}
-              layout
+              layout="position"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: isDrafted ? 0.5 : 1 }}
-              exit={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, overflow: 'hidden' }}
-              transition={{ type: 'spring', stiffness: 350, damping: 32 }}
+              exit={{ opacity: 0, height: 0, minHeight: 0, paddingTop: 0, paddingBottom: 0, marginTop: 0, marginBottom: 0, borderBottom: '1px solid transparent', overflow: 'hidden' }}
+              transition={{
+                height: { duration: 0.18, ease: 'easeOut' },
+                default: { duration: 0.18, ease: 'easeOut' },
+              }}
               style={getPlayerRowStyle(
                 isCondensedMode ? styles.playerRowCondensed : styles.playerRow,
                 player
