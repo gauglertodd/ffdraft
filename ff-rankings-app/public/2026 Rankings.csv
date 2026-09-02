@@ -8,7 +8,7 @@
 7,Amon-Ra St. Brown,WR,3,
 8,James Cook,RB,4,
 9,Jonathan Taylor,RB,4,avoid
-10,Ashton Jeanty,RB,4,draft
+10,Ashton Jeanty,RB,4,
 11,Saquon Barkley,RB,5,
 12,Chase Brown,RB,5,draft
 13,Kenneth Walker,RB,5,draft
@@ -24,7 +24,7 @@
 23,Nico Collins,WR,7,
 24,Chris Olave,WR,7,
 25,George Pickens,WR,8,
-26,DeVonta Smith,WR,8,
+26,DeVonta Smith,WR,8,draft
 27,Zay Flowers,WR,8,draft
 28,Breece Hall,RB,8,
 29,Rashee Rice,WR,8,
@@ -50,7 +50,7 @@
 49,Bhayshul Tuten,RB,10,draft
 50,Quinshon Judkins,RB,10,
 51,Parker Washington,WR,10,draft
-52,Mike Evans,WR,10,draft
+52,Mike Evans,WR,10,
 53,Christian Watson,WR,10,draft
 54,Davante Adams,WR,10,
 55,DJ Moore,WR,10,avoid
@@ -80,16 +80,16 @@
 79,Brian Thomas,WR,15,
 80,Wan'Dale Robinson,WR,15,draft
 81,Kenneth Gainwell,RB,15,
-82,RJ Harvey,RB,16,
+82,RJ Harvey,RB,16,draft
 83,Michael Pittman,WR,16,
 84,Chuba Hubbard,RB,16,
 85,Sam LaPorta,TE,16,
 86,Harold Fannin,TE,16,
 87,Caleb Williams,QB,16,
 88,Justin Herbert,QB,16,draft
-89,Trevor Lawrence,QB,16,draft
+89,Trevor Lawrence,QB,16,
 90,Jaxson Dart,QB,16,
-91,Brock Purdy,QB,16,
+91,Brock Purdy,QB,16,draft
 92,Kyle Pitts,TE,16,
 93,Jordan Mason,RB,16,draft
 94,Jayden Reed,WR,16,draft
@@ -120,9 +120,9 @@
 119,Travis Kelce,TE,19,
 120,Dallas Goedert,TE,19,
 121,Isaiah Likely,TE,19,
-122,Jalen Coker,WR,t,draft
+122,Jalen Coker,WR,19,draft
 123,Jared Goff,QB,19,
-124,Chris Rodriguez,RB,19,
+124,Chris Rodriguez,RB,19,draft
 125,Deebo Samuel,WR,19,
 126,Xavier Worthy,WR,20,
 127,Alec Pierce,WR,20,
@@ -134,7 +134,7 @@
 133,Mark Andrews,TE,21,
 134,Rashid Shaheed,WR,21,
 135,Zach Charbonnet,RB,21,
-136,Tyjae Spears,RB,21,
+136,Tyjae Spears,RB,21,draft
 137,Khalil Shakir,WR,21,
 138,Jalen McMillan,WR,21,
 139,Denzel Boston,WR,21,
@@ -182,7 +182,7 @@
 181,Kimani Vidal,RB,26,
 182,Brian Robinson,RB,26,
 183,Aaron Rodgers,QB,26,
-184,Nick Singleton,RB,27,draft
+184,Nick Singleton,RB,27,
 185,Kayshon Boutte,WR,27,
 186,Omar Cooper,WR,27,
 187,Ryan Flournoy,WR,27,
