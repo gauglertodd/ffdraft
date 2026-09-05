@@ -6,6 +6,7 @@ import FileUpload from './FileUpload';
 import PlayerList from './PlayerList';
 import TeamBoards from './TeamBoards';
 import UnifiedControlPanel from './UnifiedControlPanel';
+import EspnUploadWizard from './EspnUploadWizard';
 import SettingsPanel from './SettingsPanel';
 import KeeperModePanel from './KeeperModePanel';
 import { TEAM_MAPPING_FILES, RANKING_SOURCES, findSourceByFile } from '../rankings/sources';
@@ -87,6 +88,12 @@ const parseNoteForWatchStatus = (note) => {
   return null;
 };
 
+// League settings
+const DEFAULT_NUM_TEAMS = 12;
+const DEFAULT_ROSTER_SETTINGS = {
+  QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DST: 1, K: 1, BENCH: 5
+};
+
 const DraftTrackerContent = () => {
   const { isDarkMode, toggleTheme, themeStyles } = useTheme();
 
@@ -106,10 +113,8 @@ const DraftTrackerContent = () => {
   const [avoidHighlightOpacity, setAvoidHighlightOpacity] = useState(30);
 
   // League settings
-  const [numTeams, setNumTeams] = useState(12);
-  const [rosterSettings, setRosterSettings] = useState({
-    QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DST: 1, K: 1, BENCH: 5
-  });
+  const [numTeams, setNumTeams] = useState(DEFAULT_NUM_TEAMS);
+  const [rosterSettings, setRosterSettings] = useState(DEFAULT_ROSTER_SETTINGS);
   const [positionColors, setPositionColors] = useState({
     QB: '#dc2626',
     RB: '#16a34a',
@@ -991,6 +996,11 @@ const createTeamMappingFromPreloadedCSVs = async () => {
       setAvailabilityPredictions({});
       setIsKeeperMode(false);
       hasShownRestoreDialogRef.current = false;
+      // Restore persisted config to current defaults too - a stale autosave
+      // otherwise keeps its old values in memory and re-persists them on the
+      // next autosave, so "Clear" would never actually reset anything.
+      setRosterSettings(DEFAULT_ROSTER_SETTINGS);
+      setNumTeams(DEFAULT_NUM_TEAMS);
       clearDraftState();
     }
   };
@@ -1337,6 +1347,46 @@ const createTeamMappingFromPreloadedCSVs = async () => {
       setIsPredicting(false);
     }
   };
+
+  // ESPN import: serialize every pick (drafted + keepers with a slot) into a
+  // self-contained JSON file the tools/import_to_espn.py script consumes. Pick
+  // number = overall pick; teamId indexes 1..numTeams in ESPN draft-slot order.
+  const exportForEspn = useCallback(() => {
+    const picks = draftedPlayers
+      .filter(p => p.draftInfo?.pickNumber && p.draftInfo?.teamId)
+      .map(p => ({
+        overallPickNumber: p.draftInfo.pickNumber,
+        teamId: p.draftInfo.teamId,
+        round: p.draftInfo.round,
+        isKeeper: p.status === 'keeper' || !!p.draftInfo.isKeeper,
+        name: p.name,
+        position: p.position,
+        team: p.team,
+      }))
+      .sort((a, b) => a.overallPickNumber - b.overallPickNumber);
+    if (picks.length === 0) {
+      toast.warning('No picks to export yet - draft (or mark keepers with slots) first.');
+      return;
+    }
+    const payload = {
+      source: 'ffdraft',
+      exportedAt: new Date().toISOString(),
+      numTeams,
+      draftStyle,
+      teamNames,
+      picks,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ffdraft-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${picks.length} pick(s) for ESPN import.`);
+  }, [draftedPlayers, numTeams, draftStyle, teamNames]);
+
+  const [espnWizardOpen, setEspnWizardOpen] = useState(false);
 
   // Strategy + ranking auto-detection from each team's actual picks. Runs the
   // Python replay (strategies) and the JS board replay (rankings), then
@@ -2220,6 +2270,8 @@ const createTeamMappingFromPreloadedCSVs = async () => {
             onRestartDraft={restartDraft}
             onSaveDraft={() => saveDraftState(true)}
             onClearSavedState={handleNewDraft}
+            onExportForEspn={exportForEspn}
+            onOpenEspnImport={() => setEspnWizardOpen(true)}
             watchedPlayers={watchedPlayers}
             toggleWatchPlayer={toggleWatchPlayer}
             isPlayerWatched={isPlayerWatched}
@@ -2350,6 +2402,13 @@ const createTeamMappingFromPreloadedCSVs = async () => {
             keepers={keepers}
           />
         </>
+      )}
+
+      {espnWizardOpen && (
+        <EspnUploadWizard
+          themeStyles={themeStyles}
+          onClose={() => setEspnWizardOpen(false)}
+        />
       )}
 
       <style>

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw, Save, Trash2, Plus, Eye, X, UserPlus, Crown } from 'lucide-react';
+import { Upload, Undo2, Search, RotateCcw, FileText, RefreshCw, Save, Trash2, Plus, Eye, X, UserPlus, Crown, Download } from 'lucide-react';
 import { RANKING_FILES, rankingLabel } from '../rankings/sources';
 import { toast } from 'sonner';
 
@@ -16,6 +16,8 @@ const UnifiedControlPanel = ({
   onSwitchCSV,
   onSaveDraft,
   onClearSavedState,
+  onExportForEspn,
+  onOpenEspnImport,
   // Watch/Avoid functionality - now working with unified state
   watchedPlayers,
   toggleWatchPlayer,
@@ -574,6 +576,34 @@ const UnifiedControlPanel = ({
           >
             <Trash2 size={14} />
             Clear
+          </button>
+
+          {/* ESPN Export + Import */}
+          <button
+            onClick={onExportForEspn}
+            disabled={draftedPlayers.length === 0}
+            style={{
+              ...styles.button,
+              backgroundColor: '#2563eb',
+              color: '#ffffff',
+              opacity: draftedPlayers.length === 0 ? 0.5 : 1
+            }}
+            title="Export picks as JSON for ESPN import"
+          >
+            <Download size={14} />
+            Export
+          </button>
+          <button
+            onClick={onOpenEspnImport}
+            style={{
+              ...styles.button,
+              backgroundColor: '#16a34a',
+              color: '#ffffff'
+            }}
+            title="Upload a ffdraft export to ESPN"
+          >
+            <Upload size={14} />
+            ESPN
           </button>
 
           {/* CSV Controls */}
