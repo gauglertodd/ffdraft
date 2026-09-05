@@ -484,10 +484,10 @@ const EspnUploadWizard = ({ themeStyles, onClose }) => {
           disabled={loginLaunched}
           style={{
             padding: '8px 14px', borderRadius: 6, cursor: loginLaunched ? 'wait' : 'pointer',
-            border: 'none', background: cookieStatus === 'available' ? 'transparent' : '#16a34a',
+            border: `1px solid ${cookieStatus === 'available' ? themeStyles.border : 'transparent'}`,
+            background: cookieStatus === 'available' ? 'transparent' : '#16a34a',
             color: cookieStatus === 'available' ? themeStyles.text.primary : '#fff',
             fontWeight: 600, fontSize: 12,
-            border: `1px solid ${cookieStatus === 'available' ? themeStyles.border : 'transparent'}`,
             display: 'flex', alignItems: 'center', gap: 6,
           }}
         >
