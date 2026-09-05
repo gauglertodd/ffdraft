@@ -50,7 +50,7 @@ const SettingsPanel = ({
 }) => {
   const [activeTab, setActiveTab] = useState('auto-draft');
   const [isExpanded, setIsExpanded] = useState(false);
-  const inputRefs = useRef({});
+
 
   // Auto-draft strategies
   const strategies = [
@@ -81,13 +81,15 @@ const SettingsPanel = ({
     setTeamNames(prev => ({ ...prev, [teamId]: newName }));
   }, [setTeamNames]);
 
-  const handleTeamNameBlur = useCallback((teamId) => {
-    const input = inputRefs.current[teamId];
-    if (input) {
-      const cleanName = input.value.trim() || `Team ${teamId}`;
-      input.value = cleanName;
-      handleTeamNameChange(teamId, cleanName);
-    }
+  // The blur event carries the input element; no refs needed. (The old
+  // ref-based read broke with Mantine v8, whose TextInput ref points at
+  // the wrapper element - input.value was undefined, so every blur reset
+  // the name to the default and edits never stuck.)
+  const handleTeamNameBlur = useCallback((teamId, event) => {
+    const raw = event?.currentTarget?.value;
+    const cleanName = (raw || '').trim() || `Team ${teamId}`;
+    if (event?.currentTarget) event.currentTarget.value = cleanName;
+    handleTeamNameChange(teamId, cleanName);
   }, [handleTeamNameChange]);
 
   const setAllTeamsStrategy = useCallback((strategy) => {
@@ -435,10 +437,6 @@ const SettingsPanel = ({
           const selectedStrategy = strategies.find(s => s.value === strategy);
           const meta = inferredMeta?.[teamId];
 
-          if (!inputRefs.current[teamId]) {
-            inputRefs.current[teamId] = React.createRef();
-          }
-
           return (
             <Paper
               key={teamId}
@@ -452,9 +450,8 @@ const SettingsPanel = ({
             >
               <Stack gap={6}>
                 <TextInput
-                  ref={inputRefs.current[teamId]}
                   defaultValue={teamNames[teamId] || `Team ${teamId}`}
-                  onBlur={() => handleTeamNameBlur(teamId)}
+                  onBlur={(e) => handleTeamNameBlur(teamId, e)}
                   size="xs"
                   variant="unstyled"
                   placeholder={`Team ${teamId}`}
